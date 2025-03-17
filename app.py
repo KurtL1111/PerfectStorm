@@ -8,17 +8,17 @@ developed by John R. Connelley in his book "Tech Smart".
 import dash
 from dash import dcc, html, Input, Output, State, callback
 import plotly.graph_objects as go
+import plotly.express as px    # Added import for Plotly Express
 from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-
 from market_data_retrieval import MarketDataRetriever
 from technical_indicators import TechnicalIndicators
 from backtesting_engine import BacktestingEngine
-from ml_pattern_recognition import PatternRecognitionModel
-from ml_clustering import MarketClusteringModel
-from ml_anomaly_detection import AnomalyDetectionModel
+from ml_pattern_recognition import PatternRecognition
+from ml_clustering import PerfectStormClustering
+from ml_anomaly_detection import MarketAnomalyDetection
 from adaptive_thresholds import AdaptiveThresholds
 from correlation_regime_analysis import CorrelationRegimeAnalyzer
 
@@ -123,6 +123,9 @@ app.layout = html.Div([
         )
     ]),
     
+    html.Div(id='alerts-div', style={'padding': '10px', 'backgroundColor': '#ffe6e6', 'border': '1px solid red', 'margin': '10px'}),
+    dcc.Interval(id='real-time-alerts', interval=60000, n_intervals=0),
+    
     html.Div([
         html.Hr(),
         html.P("Data sources: Yahoo Finance, MarketWatch, AAII Investor Sentiment Survey", style={'textAlign': 'center'}),
@@ -142,6 +145,7 @@ app.layout = html.Div([
      Output('clusters-chart', 'figure'),
      Output('anomalies-chart', 'figure'),
      Output('market-regime-chart', 'figure'),
+     Output('backtesting-results-chart', 'figure'),   # Added output for backtesting results
      Output('perfect-storm-analysis', 'children')],
     [Input('update-button', 'n_clicks')],
     [State('symbol-input', 'value'),
@@ -149,25 +153,13 @@ app.layout = html.Div([
 )
 def update_dashboard(n_clicks, symbol, period):
     """
-    Update the dashboard with the latest data
-    
-    Parameters:
-    - n_clicks: Number of times the update button has been clicked
-    - symbol: Stock symbol
-    - period: Time period
-    
-    Returns:
-    - market_data_info: Market data information
-    - main_chart: Main chart figure
-    - indicators_chart: Indicators chart figure
-    - moving_averages_chart: Moving averages chart figure
-    - volume_chart: Volume chart figure
-    - oscillators_chart: Oscillators chart figure
-    - sentiment_chart: Sentiment chart figure
-    - perfect_storm_analysis: Perfect Storm analysis
+    Update the dashboard with the latest data.
     """
-    # Initialize data retriever
-    data_retriever = MarketDataRetriever()
+    import os
+    # Retrieve AlphaVantage API key from environment variables (or use "demo")
+    api_key = os.getenv("ALPHAVANTAGE_API_KEY", "demo")
+    # Initialize data retriever with the API key
+    data_retriever = MarketDataRetriever(api_key=api_key)
     
     # Get stock data
     stock_data = data_retriever.get_stock_data(symbol, period)
@@ -178,10 +170,12 @@ def update_dashboard(n_clicks, symbol, period):
             html.H3("Data Retrieval Error"),
             html.P(f"Failed to retrieve stock data for {symbol}. Please check the symbol and try again."),
         ])
-        # Return error message and empty figures
         empty_fig = go.Figure()
         empty_fig.update_layout(title="No Data Available")
-        return error_message, empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, "No data available for analysis"
+        # Return 13 outputs including empty figure for backtesting results
+        return (error_message, empty_fig, empty_fig, empty_fig,
+                empty_fig, empty_fig, empty_fig, empty_fig, empty_fig,
+                empty_fig, empty_fig, empty_fig, "No data available for analysis")
     
     # Get market breadth data
     market_breadth_data = data_retriever.get_market_breadth_data()
@@ -214,29 +208,40 @@ def update_dashboard(n_clicks, symbol, period):
     sentiment_chart = create_sentiment_chart(df, sentiment_data)
 
     # ML Analysis
-    pattern_model = PatternRecognitionModel()
+    pattern_model = PatternRecognition()
+    # Optionally try loading ONNX model for inference
+    try:
+        pattern_model.load_onnx_model()
+        # Run ONNX inference as a test; ignore output for now
+        _ = pattern_model.predict(df, use_onnx=True)
+    except Exception as e:
+        print("ONNX runtime for pattern recognition not used, fallback to PyTorch:", e)
     patterns = pattern_model.detect_patterns(df)
     
-    clustering_model = MarketClusteringModel()
+    clustering_model = PerfectStormClustering()
     clusters = clustering_model.cluster_data(df)
     
-    anomaly_model = AnomalyDetectionModel()
+    anomaly_model = MarketAnomalyDetection()
     anomalies = anomaly_model.detect_anomalies(df)
     
+    # Adaptive thresholds integration
     thresholds_model = AdaptiveThresholds()
-    thresholds = thresholds_model.compute_thresholds(df)
+    dynamic_thresholds = thresholds_model.compute_thresholds(df)
     
-    # Market Regime Analysis
+    # Market Regime Analysis and Backtesting – existing integration
     regime_analyzer = CorrelationRegimeAnalyzer(df)
     market_regimes = regime_analyzer.detect_market_regimes()
-    
-    # Backtesting
     backtester = BacktestingEngine()
-    backtester.run_backtest(df, market_regimes)
+    backtest_results = backtester.run_backtest(df, market_regimes)  # Using market regime output as signals
     
-    # Create Perfect Storm analysis
+    # Create Perfect Storm analysis and append adaptive thresholds info
     perfect_storm_analysis = create_perfect_storm_analysis(df)
-
+    perfect_storm_analysis = html.Div([
+        perfect_storm_analysis,
+        html.H4("Adaptive Thresholds"),
+        html.Pre(str(dynamic_thresholds))
+    ])
+    
     patterns_chart = px.line(patterns, title="Pattern Recognition")
     clusters_chart = px.scatter(clusters, title="Market Clustering")
     anomalies_chart = px.scatter(anomalies, title="Anomaly Detection")
@@ -245,10 +250,31 @@ def update_dashboard(n_clicks, symbol, period):
     regime_chart.add_trace(go.Scatter(y=market_regimes, mode='lines+markers', name='Market Regimes'))
     regime_chart.update_layout(title="Market Regime Detection", xaxis_title="Time", yaxis_title="Regime")
 
-    # Backtesting Results Section
     backtesting_results = create_backtesting_results(backtest_results)
     
-    return market_data_info, main_chart, indicators_chart, moving_averages_chart, volume_chart, oscillators_chart, sentiment_chart, patterns_chart, clusters_chart, anomalies_chart, regime_chart, backtesting_results, perfect_storm_analysis
+    return (market_data_info, main_chart, indicators_chart, moving_averages_chart,
+            volume_chart, oscillators_chart, sentiment_chart, patterns_chart,
+            clusters_chart, anomalies_chart, regime_chart, backtesting_results,
+            perfect_storm_analysis)
+
+# New callback for real-time alerts
+@callback(
+    Output('alerts-div', 'children'),
+    Input('real-time-alerts', 'n_intervals')
+)
+def update_alerts(n):
+    """
+    Check conditions and update alerts in real time.
+    For example, if adaptive thresholds or ML modules trigger a "perfect storm".
+    """
+    # Dummy implementation – replace with real alert checks (e.g., using AdaptiveThresholds or pattern models)
+    import random
+    alerts = []
+    if random.random() > 0.8:
+        alerts.append("ALERT: Significant market signal detected!")
+    if not alerts:
+        alerts.append("No alerts at this time.")
+    return html.Ul([html.Li(alert) for alert in alerts])
 
 def create_market_data_info(df, symbol, market_breadth_data, sentiment_data):
     """
@@ -1149,4 +1175,4 @@ def create_perfect_storm_analysis(df):
     return html.Div(analysis)
 
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0')
+    app.run_server(debug=True, host='localhost')

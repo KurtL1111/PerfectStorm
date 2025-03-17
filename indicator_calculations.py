@@ -371,23 +371,23 @@ class PerfectStormIndicators:
 
 
 # Example usage
-def example_usage():
-    """Example of how to use the PerfectStormIndicators class"""
-    
-    # Create sample data
-    dates = pd.date_range(start='2020-01-01', periods=100, freq='D')
-    data = {
-        'open': np.random.normal(100, 5, 100),
-        'high': np.random.normal(105, 5, 100),
-        'low': np.random.normal(95, 5, 100),
-        'close': np.random.normal(100, 5, 100),
-        'volume': np.random.normal(1000000, 200000, 100)
-    }
-    
-    # Ensure high is always highest and low is always lowest
-    for i in range(len(data['open'])):
-        values = [data['open'][i], data['close'][i]]
-        data['high'][i] = max(values) + abs(np.random.normal(0, 1))
-        data['low'][i] = min(values) - abs(np.random.normal(0, 1))
-    
-    df = pd.DataFrame(data, index=<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
+#def example_usage():
+#    """Example of how to use the PerfectStormIndicators class"""
+#    
+#    # Create sample data
+#    dates = pd.date_range(start='2020-01-01', periods=100, freq='D')
+#    data = {
+#        'open': np.random.normal(100, 5, 100),
+#        'high': np.random.normal(105, 5, 100),
+#        'low': np.random.normal(95, 5, 100),
+#        'close': np.random.normal(100, 5, 100),
+#        'volume': np.random.normal(1000000, 200000, 100)
+#    }
+#   
+#    # Ensure high is always highest and low is always lowest
+#    for i in range(len(data['open'])):
+#        values = [data['open'][i], data['close'][i]]
+#        data['high'][i] = max(values) + abs(np.random.normal(0, 1))
+#        data['low'][i] = min(values) - abs(np.random.normal(0, 1))
+#    
+#    df = pd.DataFrame(data, index=<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>

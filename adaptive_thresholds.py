@@ -15,6 +15,7 @@ from scipy import stats
 from sklearn.cluster import KMeans
 import os
 import pickle
+from technical_indicators import compute_adaptive_thresholds  # new import
 
 class AdaptiveThresholds:
     """Class for adaptive indicator thresholds"""
@@ -41,7 +42,29 @@ class AdaptiveThresholds:
         
         # Initialize threshold history
         self.threshold_history = {}
-    
+
+    def compute_thresholds(self, df, risk_tolerance=0.05):
+        """
+        Compute dynamic thresholds based on market volatility and statistical quantiles.
+        Parameters:
+         - df: DataFrame with market data and indicators
+         - risk_tolerance: Personal risk tolerance factor
+        Returns:
+         - thresholds: Dict with adaptive thresholds
+        """
+        # Calculate rolling volatility of close price returns
+        vol = df['close'].pct_change().rolling(window=20).std()
+        # Adaptive RSI threshold around 50 adjusted by the median volatility
+        rsi_threshold = 50 + (vol.median() * 100 * risk_tolerance)
+        # Adaptive MACD threshold based on the median of MACD histogram if available
+        macd_threshold = df['macd_hist'].quantile(0.5) if 'macd_hist' in df.columns else 0
+        thresholds = {
+            'rsi_threshold': rsi_threshold,
+            'macd_threshold': macd_threshold,
+            # ...other thresholds can be added similarly...
+        }
+        return thresholds
+
     def calculate_volatility(self, df, price_col='close'):
         """
         Calculate market volatility
@@ -715,6 +738,19 @@ class PerfectStormAdaptiveStrategy:
                 df_signals.loc[df_signals.index[i], 'sell_signal'] = 0
         
         return df_signals
+
+    def __init__(self, risk_tolerance=0.5):
+        self.adaptive_threshold = AdaptiveThresholds(risk_tolerance)
+
+    def adjust_signals(self, df):
+        """
+        Adjust buy/sell signals dynamically based on computed thresholds.
+        """
+        thresholds = self.adaptive_threshold.compute_thresholds(df)
+        # Use adaptive thresholds to update RSI-based signals.
+        df['buy_signal'] = (df['rsi'] < thresholds['rsi_lower']).astype(int)
+        df['sell_signal'] = (df['rsi'] > thresholds['rsi_upper']).astype(int)
+        return df
 
 # Example usage
 def example_usage():

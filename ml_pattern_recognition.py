@@ -562,3 +562,11 @@ class PatternRecognition:
         df_patterns.loc[df_patterns['pattern_probability'] >= threshold, 'pattern_signal'] = 1
         
         return df_patterns
+
+# Add alias class for seamless integration in the dashboard
+__all__ = ["MarketPatternDataset", "LSTMModel", "CNNModel", "PatternRecognition", "PatternRecognitionModel"]
+
+class PatternRecognitionModel(PatternRecognition):
+    # No additional implementation needed; inherits everything from PatternRecognition
+    def detect_patterns(self, df):
+        return self.identify_patterns(df)

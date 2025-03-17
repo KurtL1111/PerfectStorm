@@ -700,3 +700,15 @@ class TechnicalIndicators:
                 df.at[df.index[i], 'sell_signal'] = 0
         
         return df
+
+def compute_adaptive_thresholds(prices, risk_tolerance=0.5):
+    """
+    Compute adaptive thresholds based on volatility and risk tolerance.
+    Returns lower and upper thresholds for an indicator.
+    """
+    returns = prices.pct_change().dropna()
+    volatility = returns.std()
+    # For simplicity use quantile-based thresholds (could be replaced by more advanced stats)
+    lower = prices.quantile(0.25) * (1 - risk_tolerance * volatility)
+    upper = prices.quantile(0.75) * (1 + risk_tolerance * volatility)
+    return lower, upper

@@ -69,6 +69,22 @@ class CorrelationRegimeAnalyzer:
         
         return states
 
+    def compute_weighted_indicator_signals(self, indicators, predictive_power):
+        """
+        Compute weighted signals based on historical predictive power.
+        Parameters:
+         - indicators: DataFrame of technical indicators.
+         - predictive_power: Dict mapping indicator names to their weight.
+        Returns:
+         - weighted_signals: Series of weighted signals.
+        """
+        weighted = indicators.copy()
+        for col in weighted.columns:
+            weight = predictive_power.get(col, 1)
+            weighted[col] = weighted[col] * weight
+        weighted_signals = weighted.sum(axis=1)
+        return weighted_signals
+
 # Dashboard Layout
 app.layout = html.Div([
     html.Div([

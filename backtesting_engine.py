@@ -724,6 +724,32 @@ class BacktestingEngine:
         plt.tight_layout()
         plt.show()
 
+    def optimize_portfolio(self, df, expected_returns, cov_matrix, risk_aversion=0.5):
+        """
+        Optimize portfolio weights using mean-variance optimization.
+        Parameters:
+         - df: DataFrame with asset prices (each column an asset)
+         - expected_returns: Array of expected returns
+         - cov_matrix: Covariance matrix of asset returns
+         - risk_aversion: Risk aversion parameter
+        Returns:
+         - optimal_weights: Array of optimal weights
+        """
+        import numpy as np
+        num_assets = len(expected_returns)
+        init_guess = np.repeat(1/num_assets, num_assets)
+        bounds = [(0, 1) for _ in range(num_assets)]
+        constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+        
+        def objective(weights):
+            port_return = np.dot(weights, expected_returns)
+            port_variance = np.dot(weights.T, np.dot(cov_matrix, weights))
+            return - (port_return - risk_aversion * port_variance)
+        
+        from scipy.optimize import minimize
+        result = minimize(objective, init_guess, method='SLSQP', bounds=bounds, constraints=constraints)
+        return result.x if result.success else init_guess
+
 class PerfectStormStrategy:
     """Class for Perfect Storm trading strategy"""
     

@@ -13,9 +13,9 @@ from datetime import datetime, timedelta
 import json
 import requests
 from bs4 import BeautifulSoup
-import yfinance as yf
 import time
 import random
+from market_data_retrieval import MarketDataRetriever
 
 class StockDataRetriever:
     """Class to retrieve stock data and market data for Perfect Storm Dashboard"""
@@ -30,12 +30,12 @@ class StockDataRetriever:
     
     def get_stock_history(self, symbol, interval='1d', range_period='1y'):
         """
-        Get historical stock data with caching
+        Get historical stock data with caching using AlphaVantage API
         
         Parameters:
         - symbol: Stock symbol
-        - interval: Data interval (1d, 1wk, 1mo, etc.)
-        - range_period: Time range (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
+        - interval: (Ignored; AlphaVantage provides daily data) 
+        - range_period: Time range (e.g., '1y') where 'y' means years
         
         Returns:
         - DataFrame with historical data
@@ -60,19 +60,18 @@ class StockDataRetriever:
         # If cache is not valid, fetch new data
         if not cache_valid:
             try:
-                # Use yfinance to get data
-                stock = yf.Ticker(symbol)
-                df = stock.history(period=range_period, interval=interval)
-                
-                if df.empty:
-                    print(f"No data found for {symbol}")
-                    return self._generate_sample_data()
-                
+                # Retrieve data using AlphaVantage API via MarketDataRetriever
+                api_key = os.getenv("ALPHAVANTAGE_API_KEY", "demo")
+                retriever = MarketDataRetriever(api_key=api_key)
+                df = retriever.get_stock_data(symbol, period=range_period)
+                if df is None or df.empty:
+                    print(f"No data found for {symbol} using AlphaVantage. Generating sample data.")
+                    df = self._generate_sample_data()
+                else:
+                    print(f"Retrieved data for {symbol} via AlphaVantage.")
                 # Save to cache
                 df.to_csv(cache_file)
-                
                 return df
-                
             except Exception as e:
                 print(f"Error fetching data for {symbol}: {e}")
                 return self._generate_sample_data()
@@ -364,10 +363,10 @@ class StockDataRetriever:
 
 
 # Example usage
-def example_usage():
-    """Example of how to use the StockDataRetriever class"""
-    
-    retriever = StockDataRetriever()
-    
-    # Get stock data
-    df = retriever.get_stock_history<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
+#def example_usage():
+#    """Example of how to use the StockDataRetriever class"""
+#    
+#    retriever = StockDataRetriever()
+#    
+#    # Get stock data
+#    df = retriever.get_stock_history<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
