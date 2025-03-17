@@ -15,6 +15,12 @@ from datetime import datetime, timedelta
 
 from market_data_retrieval import MarketDataRetriever
 from technical_indicators import TechnicalIndicators
+from backtesting_engine import BacktestingEngine
+from ml_pattern_recognition import PatternRecognitionModel
+from ml_clustering import MarketClusteringModel
+from ml_anomaly_detection import AnomalyDetectionModel
+from adaptive_thresholds import AdaptiveThresholds
+from correlation_regime_analysis import CorrelationRegimeAnalyzer
 
 # Initialize the app
 app = dash.Dash(__name__, title="Perfect Storm Dashboard")
@@ -89,6 +95,30 @@ app.layout = html.Div([
                     html.H3("Perfect Storm Analysis"),
                     html.Div(id='perfect-storm-analysis', style={'padding': '10px', 'backgroundColor': '#f9f9f9', 'border': '1px solid #ddd', 'borderRadius': '5px'}),
                 ]),
+                html.Div([
+                    html.Div([
+                        html.H3("Pattern Recognition"),
+                        dcc.Graph(id='patterns-chart', style={'height': '400px'}),
+                    ], style={'width': '50%', 'display': 'inline-block', 'padding': '10px'}),
+                    html.Div([
+                        html.H3("Market Clustering"),
+                        dcc.Graph(id='clusters-chart', style={'height': '400px'}),
+                    ], style={'width': '50%', 'display': 'inline-block', 'padding': '10px'}),
+                ]),
+                html.Div([
+                    html.Div([
+                        html.H3("Anomaly Detection"),
+                        dcc.Graph(id='anomalies-chart', style={'height': '400px'}),
+                    ], style={'width': '50%', 'display': 'inline-block', 'padding': '10px'}),
+                    html.Div([
+                        html.H3("Market Regime Detection"),
+                        dcc.Graph(id='market-regime-chart', style={'height': '400px'}),
+                    ], style={'width': '50%', 'display': 'inline-block', 'padding': '10px'}),
+                ]),
+                html.Div([
+                    html.H3("Backtesting Results"),
+                    dcc.Graph(id='backtesting-results-chart', style={'height': '400px'}),
+                ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px'}),
             ]
         )
     ]),
@@ -108,6 +138,10 @@ app.layout = html.Div([
      Output('volume-chart', 'figure'),
      Output('oscillators-chart', 'figure'),
      Output('sentiment-chart', 'figure'),
+     Output('patterns-chart', 'figure'),
+     Output('clusters-chart', 'figure'),
+     Output('anomalies-chart', 'figure'),
+     Output('market-regime-chart', 'figure'),
      Output('perfect-storm-analysis', 'children')],
     [Input('update-button', 'n_clicks')],
     [State('symbol-input', 'value'),
@@ -178,11 +212,43 @@ def update_dashboard(n_clicks, symbol, period):
     
     # Create sentiment chart
     sentiment_chart = create_sentiment_chart(df, sentiment_data)
+
+    # ML Analysis
+    pattern_model = PatternRecognitionModel()
+    patterns = pattern_model.detect_patterns(df)
+    
+    clustering_model = MarketClusteringModel()
+    clusters = clustering_model.cluster_data(df)
+    
+    anomaly_model = AnomalyDetectionModel()
+    anomalies = anomaly_model.detect_anomalies(df)
+    
+    thresholds_model = AdaptiveThresholds()
+    thresholds = thresholds_model.compute_thresholds(df)
+    
+    # Market Regime Analysis
+    regime_analyzer = CorrelationRegimeAnalyzer(df)
+    market_regimes = regime_analyzer.detect_market_regimes()
+    
+    # Backtesting
+    backtester = BacktestingEngine()
+    backtester.run_backtest(df, market_regimes)
     
     # Create Perfect Storm analysis
     perfect_storm_analysis = create_perfect_storm_analysis(df)
+
+    patterns_chart = px.line(patterns, title="Pattern Recognition")
+    clusters_chart = px.scatter(clusters, title="Market Clustering")
+    anomalies_chart = px.scatter(anomalies, title="Anomaly Detection")
+
+    regime_chart = go.Figure()
+    regime_chart.add_trace(go.Scatter(y=market_regimes, mode='lines+markers', name='Market Regimes'))
+    regime_chart.update_layout(title="Market Regime Detection", xaxis_title="Time", yaxis_title="Regime")
+
+    # Backtesting Results Section
+    backtesting_results = create_backtesting_results(backtest_results)
     
-    return market_data_info, main_chart, indicators_chart, moving_averages_chart, volume_chart, oscillators_chart, sentiment_chart, perfect_storm_analysis
+    return market_data_info, main_chart, indicators_chart, moving_averages_chart, volume_chart, oscillators_chart, sentiment_chart, patterns_chart, clusters_chart, anomalies_chart, regime_chart, backtesting_results, perfect_storm_analysis
 
 def create_market_data_info(df, symbol, market_breadth_data, sentiment_data):
     """
@@ -785,6 +851,217 @@ def create_sentiment_chart(df, sentiment_data):
         fig.update_yaxes(title_text="Bulls/Bears Ratio", secondary_y=True)
     
     return fig
+
+def create_patterns_chart(df):
+    """
+    Create patterns chart
+    
+    Parameters:
+    - df: DataFrame with stock and indicator data
+    
+    Returns:
+    - Patterns chart figure
+    """
+    # Create figure
+    fig = go.Figure()
+    
+    # Add price
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df['close'],
+            mode='lines',
+            name="Close Price"
+        )
+    )
+    
+    # Add patterns if available
+    if 'patterns' in df.columns:
+        for pattern in df['patterns'].unique():
+            pattern_data = df[df['patterns'] == pattern]
+            fig.add_trace(
+                go.Scatter(
+                    x=pattern_data.index,
+                    y=pattern_data['close'],
+                    mode='markers',
+                    name=f"Pattern: {pattern}",
+                    marker=dict(size=10)
+                )
+            )
+    
+    # Update layout
+    fig.update_layout(
+        title="Detected Patterns",
+        height=400,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    
+    # Update y-axis label
+    fig.update_yaxes(title_text="Price ($)")
+    
+    return fig
+def create_clusters_chart(df):
+    """
+    Create clusters chart
+    Parameters:
+    - df: DataFrame with stock and indicator data
+    Returns:
+    - Clusters chart figure
+    """
+    # Create figure
+    fig = go.Figure()
+    
+    # Add price
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df['close'],
+            mode='lines',
+            name="Close Price"
+        )
+    )
+    
+    # Add clusters if available
+    if 'clusters' in df.columns:
+        for cluster in df['clusters'].unique():
+            cluster_data = df[df['clusters'] == cluster]
+            fig.add_trace(
+                go.Scatter(
+                    x=cluster_data.index,
+                    y=cluster_data['close'],
+                    mode='markers',
+                    name=f"Cluster: {cluster}",
+                    marker=dict(size=10)
+                )
+            )
+    
+    # Update layout
+    fig.update_layout(
+        title="Market Clusters",
+        height=400,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    
+    # Update y-axis label
+    fig.update_yaxes(title_text="Price ($)")
+    
+    return fig
+def create_anomalies_chart(df):
+    """
+    Create anomalies chart
+    Parameters:
+    - df: DataFrame with stock and indicator data
+    Returns:
+    - Anomalies chart figure
+    """
+    # Create figure
+    fig = go.Figure()
+    
+    # Add price
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df['close'],
+            mode='lines',
+            name="Close Price"
+        )
+    )
+    
+    # Add anomalies if available
+    if 'anomalies' in df.columns:
+        for anomaly in df['anomalies'].unique():
+            anomaly_data = df[df['anomalies'] == anomaly]
+            fig.add_trace(
+                go.Scatter(
+                    x=anomaly_data.index,
+                    y=anomaly_data['close'],
+                    mode='markers',
+                    name=f"Anomaly: {anomaly}",
+                    marker=dict(size=10)
+                )
+            )
+    
+    # Update layout
+    fig.update_layout(
+        title="Detected Anomalies",
+        height=400,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    
+    # Update y-axis label
+    fig.update_yaxes(title_text="Price ($)")
+    
+    return fig
+def create_market_regime_chart(df):
+    """
+    Create market regime chart
+    Parameters:
+    - df: DataFrame with stock and indicator data
+    Returns:
+    - Market regime chart figure
+    """
+    # Create figure
+    fig = go.Figure()
+    
+    # Add price
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df['close'],
+            mode='lines',
+            name="Close Price"
+        )
+    )
+    
+    # Add market regimes if available
+    if 'market_regime' in df.columns:
+        for regime in df['market_regime'].unique():
+            regime_data = df[df['market_regime'] == regime]
+            fig.add_trace(
+                go.Scatter(
+                    x=regime_data.index,
+                    y=regime_data['close'],
+                    mode='markers',
+                    name=f"Market Regime: {regime}",
+                    marker=dict(size=10)
+                )
+            )
+    
+    # Update layout
+    fig.update_layout(
+        title="Market Regimes",
+        height=400,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    
+    # Update y-axis label
+    fig.update_yaxes(title_text="Price ($)")
+    
+    return fig
+
+def create_backtesting_results(backtest_results):
+    """
+    Create a formatted display for backtesting results.
+    
+    Parameters:
+    - backtest_results: Dictionary with backtesting performance metrics.
+    
+    Returns:
+    - HTML Div displaying backtesting results.
+    """
+    return html.Div([
+        html.H4("Performance Metrics"),
+        html.P(f"Sharpe Ratio: {backtest_results.get('sharpe_ratio', 'N/A'):.2f}"),
+        html.P(f"Maximum Drawdown: {backtest_results.get('max_drawdown', 'N/A'):.2%}"),
+        html.P(f"Win Rate: {backtest_results.get('win_rate', 'N/A'):.2%}"),
+        html.P(f"Total Return: {backtest_results.get('total_return', 'N/A'):.2%}"),
+        html.P(f"Annualized Volatility: {backtest_results.get('volatility', 'N/A'):.2%}"),
+        html.P(f"Profit Factor: {backtest_results.get('profit_factor', 'N/A'):.2f}")
+    ])
 
 def create_perfect_storm_analysis(df):
     """
