@@ -7,22 +7,24 @@ from sklearn.decomposition import PCA
 from hmmlearn.hmm import GaussianHMM
 from indicator_calculations import PerfectStormIndicators
 from backtesting_engine import BacktestingEngine
-from data_retrieval import StockDataRetriever
+from market_data_retrieval import MarketDataRetriever
 import dash
 from dash import dcc, html, Input, Output
 import plotly.graph_objects as go
 import plotly.express as px
 import threading
 import time
+import os
 
 app = dash.Dash(__name__, title="Perfect Storm Dashboard", external_stylesheets=["https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css"])
-retriever = StockDataRetriever()
+api_key = os.getenv("ALPHAVANTAGE_API_KEY", "25WNVRI1YIXCDIH1")
+retriever = MarketDataRetriever(api_key=api_key)
 alerts = []
 
 def monitor_market_regimes(stock_symbol, time_period):
     """Continuously monitors market regimes and sends alerts."""
     while True:
-        historical_data = retriever.get_stock_history(stock_symbol, range_period=time_period)
+        historical_data = retriever.get_stock_history(stock_symbol, interval='1d', period=time_period)
         indicators = PerfectStormIndicators()
         calculated_indicators = indicators.calculate_moving_averages(historical_data)
         analyzer = CorrelationRegimeAnalyzer(calculated_indicators)

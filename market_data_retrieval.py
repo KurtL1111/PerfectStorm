@@ -1,78 +1,62 @@
+import os
 import requests
-from bs4 import BeautifulSoup
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 
 class MarketDataRetriever:
     """
-    Class to retrieve market data for the Perfect Storm dashboard.
+    Class to retrieve market data for the Perfect Storm Dashboard.
     
-    This class provides methods to fetch stock data, market breadth data,
-    sentiment data, and placeholders for social sentiment, options data,
-    and institutional flow data.
+    This unified class retrieves:
+      - Historical stock prices using yfinance_cache for intervals >= 1 day.
+      - Intraday stock prices using AlphaVantage for intervals < 1 day.
+      - Market breadth data from MarketWatch.
+      - Investor sentiment data from AAII, with a fallback to a local file.
+      - (Other methods such as options and institutional flow remain as placeholders.)
     """
     
     def __init__(self, api_key=None):
-        """
-        Initialize the MarketDataRetriever.
-        
-        Parameters:
-        - api_key: AlphaVantage API key (optional). If not provided, a default key is used.
-        """
+        # Use the provided API key (for intraday data) or default key.
         self.api_key = api_key or "25WNVRI1YIXCDIH1"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
     
-    def get_stock_history(self, symbol, interval='daily', period='1y', api_key=None):
-        """
-        Retrieve stock history data from AlphaVantage.
-        
-        Parameters:
-        - symbol: Stock symbol (e.g., 'AAPL')
-        - interval: Time interval ('daily', 'weekly', 'monthly')
-        - period: Historical period to retrieve (e.g., '1y', '5y')
-        - api_key: AlphaVantage API key (optional). If not provided, the instance's API key is used.
-        
-        Returns:
-        - pandas.DataFrame with stock history data (columns: 'open', 'high', 'low', 'close', 'volume')
-        - None if retrieval fails
-        """
-        function_map = {
-            'daily': 'TIME_SERIES_DAILY',
-            'weekly': 'TIME_SERIES_WEEKLY',
-            'monthly': 'TIME_SERIES_MONTHLY'
-        }
-        function = function_map.get(interval, 'TIME_SERIES_DAILY')
-        api_key = api_key or self.api_key
-        url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&apikey={api_key}&outputsize=full"
-        r = requests.get(url)
-        data = r.json()
-        ts_key = next((key for key in data if key.startswith("Time Series")), None)
-        if ts_key is None:
-            return None
-        df = pd.DataFrame.from_dict(data[ts_key], orient='index').astype(float)
-        df.index = pd.to_datetime(df.index)
-        df = df.sort_index()
-        df = df.rename(columns=lambda x: x.split(". ")[-1])
-        # Filter based on period
-        if period.endswith('y'):
-            years = int(period[:-1])
-            start = df.index[-1] - pd.DateOffset(years=years)
-            df = df[df.index >= start]
-        return df
+    def get_stock_history(self, symbol, interval='1d', period='1y'):
+        if interval.endswith('m'):
+            function = "TIME_SERIES_INTRADAY"
+            interval_param = interval.replace('m', 'min')
+            url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&interval={interval_param}&apikey={self.api_key}&outputsize=compact"
+            r = requests.get(url)
+            data = r.json()
+            print("AlphaVantage Response:", data)  # Debugging API response
+            ts_key = next((key for key in data if key.startswith("Time Series")), None)
+            if ts_key is None:
+                print("No Time Series Key Found in API Response")
+                return pd.DataFrame()
+            df = pd.DataFrame.from_dict(data[ts_key], orient='index').astype(float)
+            df.index = pd.to_datetime(df.index)
+            df = df.sort_index()
+            print("Intraday Data Preview:\n", df.head())  # Debugging output
+            return df
+        else:
+            import yfinance_cache as yf
+            df = yf.download(symbol, period=period, interval=interval)
+            print("Raw yfinance_cache DataFrame Columns:", df.columns)  # Debugging output
+            if not df.empty:
+                df = df.rename(columns=str.lower)
+                df.index = df.index.tz_localize(None)  # Remove timezone
+            print("Processed DataFrame Columns:", df.columns)  # Debugging output
+            return df
 
     def get_market_breadth_data(self):
         """
         Get market breadth data from MarketWatch.
         
         Returns:
-        - Dictionary with market breadth data:
-          - 'advancing_issues': Number of advancing issues
-          - 'declining_issues': Number of declining issues
-          - 'advancing_volume': Volume of advancing issues
-          - 'declining_volume': Volume of declining issues
-        - None if retrieval fails
+          - Dictionary with keys: 'advancing_issues', 'declining_issues', 'advancing_volume', 'declining_volume'
+          - None if retrieval fails.
         """
         try:
             url = "https://www.marketwatch.com/market-data/us?mod=market-data-center"
@@ -80,6 +64,7 @@ class MarketDataRetriever:
             if response.status_code != 200:
                 raise Exception(f"Failed to retrieve market breadth data: {response.status_code}")
             soup = BeautifulSoup(response.text, 'html.parser')
+            # Implementation: search for table cells containing 'Advancing' and 'Declining'
             advancing_issues = declining_issues = advancing_volume = declining_volume = None
             tables = soup.find_all('table')
             for table in tables:
@@ -88,11 +73,12 @@ class MarketDataRetriever:
                     rows = table.find_all('tr')
                     for row in rows:
                         cells = row.find_all('td')
-                        if len(cells) >= 2:
-                            if 'Issues' in cells[0].text:
+                        if len(cells) >= 3:
+                            cell_text = cells[0].text.strip()
+                            if 'Issues' in cell_text:
                                 advancing_issues = self._parse_number(cells[1].text)
                                 declining_issues = self._parse_number(cells[2].text)
-                            elif 'Volume' in cells[0].text:
+                            elif 'Volume' in cell_text:
                                 advancing_volume = self._parse_number(cells[1].text)
                                 declining_volume = self._parse_number(cells[2].text)
             if advancing_issues is None or declining_issues is None:
@@ -108,66 +94,63 @@ class MarketDataRetriever:
             return None
     
     def get_sentiment_data(self):
-            """
-            Get sentiment data from AAII Investor Sentiment Survey, first online, then from local file if online fails.
-            
-            Returns:
-            - Dictionary with sentiment data:
-            - 'bullish': Percentage of bullish sentiment
-            - 'bearish': Percentage of bearish sentiment
-            - 'neutral': Percentage of neutral sentiment
-            - None if retrieval fails
-            """
-            try:
-                url = "https://www.aaii.com/sentimentsurvey/sent_results"
-                response = requests.get(url, headers=self.headers)
-                if response.status_code != 200:
-                    raise Exception(f"Failed to retrieve sentiment data: {response.status_code}")
-                soup = BeautifulSoup(response.text, 'html.parser')
-                bullish = bearish = neutral = None
-                tables = soup.find_all('table')
-                for table in tables:
-                    rows = table.find_all('tr')
-                    for row in rows:
-                        cells = row.find_all('td')
-                        if len(cells) >= 2:
-                            if 'Bullish' in cells[0].text:
-                                bullish = self._parse_percentage(cells[1].text)
-                            elif 'Bearish' in cells[0].text:
-                                bearish = self._parse_percentage(cells[1].text)
-                            elif 'Neutral' in cells[0].text:
-                                neutral = self._parse_percentage(cells[1].text)
-                if bullish is None or bearish is None:
-                    return None
-                return {
-                    'bullish': bullish,
-                    'bearish': bearish,
-                    'neutral': neutral
-                }
-            except Exception as e:
-                print(f"Error retrieving sentiment data: {e}")
-                return self.get_social_sentiment_data()
-
-    def get_social_sentiment_data(self):
         """
-        Get sentiment data from a local Excel file as a fallback.
+        Get investor sentiment data from AAII Investor Sentiment Survey.
+        
+        Attempts to scrape from AAII website. If unsuccessful, falls back to local file.
         
         Returns:
-        - Dictionary with sentiment data:
-          - 'bullish': Percentage of bullish sentiment
-          - 'bearish': Percentage of bearish sentiment
-          - 'neutral': Percentage of neutral sentiment
-        - None if retrieval fails
+          - Dictionary with keys: 'bullish', 'bearish', 'neutral'
+          - None if retrieval fails.
+        """
+        try:
+            url = "https://www.aaii.com/sentimentsurvey/sent_results"
+            response = requests.get(url, headers=self.headers)
+            if response.status_code != 200:
+                raise Exception(f"Failed to retrieve sentiment data: {response.status_code}")
+            soup = BeautifulSoup(response.text, 'html.parser')
+            bullish = bearish = neutral = None
+            tables = soup.find_all('table')
+            for table in tables:
+                rows = table.find_all('tr')
+                for row in rows:
+                    cells = row.find_all('td')
+                    if len(cells) >= 2:
+                        if 'Bullish' in cells[0].text:
+                            bullish = self._parse_percentage(cells[1].text)
+                        elif 'Bearish' in cells[0].text:
+                            bearish = self._parse_percentage(cells[1].text)
+                        elif 'Neutral' in cells[0].text:
+                            neutral = self._parse_percentage(cells[1].text)
+            if bullish is None or bearish is None or neutral is None:
+                print("Online sentiment scrape failed; falling back to local file.")
+                return self.get_social_sentiment_data()
+            return {
+                'bullish': bullish,
+                'bearish': bearish,
+                'neutral': neutral
+            }
+        except Exception as e:
+            print(f"Error retrieving sentiment data: {e}")
+            return self.get_social_sentiment_data()
+    
+    def get_social_sentiment_data(self):
+        """
+        Fallback: Get sentiment data from a local Excel file.
+        
+        Returns:
+          - Dictionary with keys: 'bullish', 'bearish', 'neutral'
+          - None if retrieval fails.
         """
         file_path = r'C:\Users\klamo\Downloads\historical_sentiment_20250220.xls'
         try:
             df = pd.read_excel(file_path)
         except FileNotFoundError:
-            print("Error: File not found.")
+            print("Local sentiment file not found.")
             return None
         required_columns = ['Reported Date', 'Bullish', 'Neutral', 'Bearish']
         if not all(col in df.columns for col in required_columns):
-            print("Error: Required columns missing in the Excel file.")
+            print("Required columns missing in the sentiment file.")
             return None
         last_row = df.iloc[-1]
         try:
@@ -175,65 +158,36 @@ class MarketDataRetriever:
             neutral = float(last_row['Neutral'])
             bearish = float(last_row['Bearish'])
         except ValueError:
-            print("Error: Invalid data format in the Excel file.")
+            print("Invalid data format in sentiment file.")
             return None
         return {"bullish": bullish, "bearish": bearish, "neutral": neutral}
-
+    
     def _parse_number(self, text):
-        """
-        Parse a number from text by removing commas.
-        
-        Parameters:
-        - text: Text to parse
-        
-        Returns:
-        - float: Parsed number
-        - None: If parsing fails
-        """
+        """Helper: Parse a numeric value from text."""
         try:
             return float(text.replace(',', ''))
         except:
             return None
     
     def _parse_percentage(self, text):
-        """
-        Parse a percentage from text by removing the '%' symbol.
-        
-        Parameters:
-        - text: Text to parse
-        
-        Returns:
-        - float: Parsed percentage
-        - None: If parsing fails
-        """
+        """Helper: Parse a percentage value from text."""
         try:
             return float(text.replace('%', ''))
         except:
             return None
 
+    # Existing placeholder methods for options and institutional flow can remain unchanged.
+    @staticmethod
     def get_options_data(symbol, api_key):
         params = {'function': 'OPTION_CHAIN', 'symbol': symbol, 'apikey': api_key}
         response = requests.get('https://www.alphavantage.co/query', params=params)
         data = response.json()
-        # Parse to calculate put/call ratio and implied volatility
         puts = [option for option in data.get('options', []) if option['type'] == 'put']
         calls = [option for option in data.get('options', []) if option['type'] == 'call']
         put_call_ratio = len(puts) / len(calls) if calls else float('inf')
         return {'put_call_ratio': put_call_ratio, 'implied_volatility': data.get('implied_volatility', 0)}
-
+    
+    @staticmethod
     def get_institutional_flow(symbol, api_key):
-        """
-        Get institutional money flow data for the given stock symbol.
-        
-        Note: This is a placeholder method and requires implementation with actual
-              institutional flow data retrieval.
-        
-        Parameters:
-        - symbol: Stock symbol (e.g., 'AAPL')
-        
-        Returns:
-        - Dictionary with placeholder institutional money flow data:
-          - 'net_flow': Net institutional money flow
-        """
-        # TODO: Implement institutional flow data retrieval
+        # Placeholder – implement as needed.
         return {"net_flow": 1000000}

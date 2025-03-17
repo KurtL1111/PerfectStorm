@@ -157,12 +157,12 @@ def update_dashboard(n_clicks, symbol, period):
     """
     import os
     # Retrieve AlphaVantage API key from environment variables (or use "demo")
-    api_key = os.getenv("ALPHAVANTAGE_API_KEY", "demo")
+    api_key = os.getenv("ALPHAVANTAGE_API_KEY", "25WNVRI1YIXCDIH1")
     # Initialize data retriever with the API key
     data_retriever = MarketDataRetriever(api_key=api_key)
     
     # Get stock data
-    stock_data = data_retriever.get_stock_data(symbol, period)
+    stock_data = data_retriever.get_stock_history(symbol, interval='1d', period=period)
     
     # Check if stock data retrieval failed
     if stock_data is None:

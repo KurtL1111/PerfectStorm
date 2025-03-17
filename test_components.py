@@ -4,6 +4,12 @@ import pandas as pd
 import numpy as np
 import pytest
 from datetime import datetime, timedelta
+import unittest
+from unittest.mock import patch
+from ml_anomaly_detection import MarketAnomalyDetection
+from ml_clustering import PerfectStormClustering
+from ml_pattern_recognition import PatternRecognition
+from correlation_regime_analysis import CorrelationRegimeAnalyzer
 
 from market_data_retrieval import MarketDataRetriever
 
@@ -102,3 +108,57 @@ def test_get_institutional_flow():
     data = MarketDataRetriever.get_institutional_flow("AAPL", api_key="25WNVRI1YIXCDIH1")
     assert isinstance(data, dict), "Institutional flow data should be a dictionary."
     assert "net_flow" in data, "Missing net_flow in institutional flow data."
+
+
+def test_anomaly_detector_initialization():
+    detector = MarketAnomalyDetection()
+    assert detector.model is not None, "Model should be initialized."
+
+def test_anomaly_detection():
+    detector = MarketAnomalyDetection()
+    sample_data = pd.DataFrame({
+        'feature1': [0.1, 0.2, 0.1, 0.3],
+        'feature2': [1.0, 1.1, 0.9, 1.2]
+    })
+    anomalies = detector.detect(sample_data)
+    assert isinstance(anomalies, pd.DataFrame), "Output should be a DataFrame."
+    assert 'anomaly_score' in anomalies.columns, "DataFrame should contain 'anomaly_score' column."
+
+def test_clustering_model_initialization():
+    model = PerfectStormClustering(n_clusters=3)
+    assert model.n_clusters == 3, "Number of clusters should be set correctly."
+
+def test_clustering():
+    model = PerfectStormClustering(n_clusters=2)
+    sample_data = pd.DataFrame({
+        'feature1': [0.1, 0.2, 0.8, 0.9],
+        'feature2': [1.0, 1.1, 0.2, 0.3]
+    })
+    clusters = model.fit_predict(sample_data)
+    assert len(clusters) == len(sample_data), "Each data point should have a cluster assignment."
+
+def test_pattern_recognizer_initialization():
+    recognizer = PatternRecognition()
+    assert recognizer.patterns is not None, "Patterns should be initialized."
+
+def test_pattern_recognition():
+    recognizer = PatternRecognition()
+    sample_data = pd.DataFrame({
+        'price': [100, 102, 101, 105, 107]
+    })
+    patterns = recognizer.recognize(sample_data)
+    assert isinstance(patterns, list), "Output should be a list of patterns."
+
+def test_analyzer_initialization():
+    analyzer = CorrelationRegimeAnalyzer()
+    assert analyzer.window_size > 0, "Window size should be positive."
+
+def test_correlation_analysis():
+    analyzer = CorrelationRegimeAnalyzer(window_size=5)
+    sample_data = pd.DataFrame({
+        'asset1': [100, 101, 102, 103, 104],
+        'asset2': [200, 198, 202, 204, 203]
+    })
+    correlations = analyzer.calculate_rolling_correlation(sample_data)
+    assert isinstance(correlations, pd.Series), "Output should be a Series."
+    assert len(correlations) == len(sample_data) - analyzer.window_size + 1, "Incorrect length of correlation series."
