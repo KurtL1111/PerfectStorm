@@ -9,3 +9,8 @@ beautifulsoup4
 requests
 pandas_ta
 dash-bootstrap-components
+torch
+torchvision
+onnx
+onnxruntime
+hdbscan

@@ -6,10 +6,11 @@ import pytest
 from datetime import datetime, timedelta
 import unittest
 from unittest.mock import patch
-from ml_anomaly_detection import MarketAnomalyDetection
-from ml_clustering import PerfectStormClustering
-from ml_pattern_recognition import PatternRecognition
-from correlation_regime_analysis import CorrelationRegimeAnalyzer
+from ml_anomaly_detection_enhanced import MarketAnomalyDetection
+from ml_clustering_enhanced import PerfectStormClustering
+from ml_pattern_recognition_enhanced import PatternRecognition
+from market_regime_detection import MarketRegimeDetection
+from correlation_analysis import CorrelationAnalysis
 
 from market_data_retrieval import MarketDataRetriever
 
@@ -150,11 +151,11 @@ def test_pattern_recognition():
     assert isinstance(patterns, list), "Output should be a list of patterns."
 
 def test_analyzer_initialization():
-    analyzer = CorrelationRegimeAnalyzer()
+    analyzer = MarketRegimeDetection()
     assert analyzer.window_size > 0, "Window size should be positive."
 
 def test_correlation_analysis():
-    analyzer = CorrelationRegimeAnalyzer(window_size=5)
+    analyzer = MarketRegimeDetection(window_size=5)
     sample_data = pd.DataFrame({
         'asset1': [100, 101, 102, 103, 104],
         'asset2': [200, 198, 202, 204, 203]

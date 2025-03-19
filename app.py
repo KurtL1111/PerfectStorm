@@ -15,12 +15,13 @@ import numpy as np
 from datetime import datetime, timedelta
 from market_data_retrieval import MarketDataRetriever
 from technical_indicators import TechnicalIndicators
-from backtesting_engine import BacktestingEngine
-from ml_pattern_recognition import PatternRecognition
-from ml_clustering import PerfectStormClustering
-from ml_anomaly_detection import MarketAnomalyDetection
-from adaptive_thresholds import AdaptiveThresholds
-from correlation_regime_analysis import CorrelationRegimeAnalyzer
+from backtesting_engine_enhanced import BacktestingEngine
+from ml_pattern_recognition_enhanced import PatternRecognition
+from ml_clustering_enhanced import PerfectStormClustering
+from ml_anomaly_detection_enhanced import MarketAnomalyDetection
+from adaptive_thresholds_enhanced import EnhancedAdaptiveThresholds
+from market_regime_detection import MarketRegimeDetection
+from correlation_analysis import CorrelationAnalysis
 
 # Initialize the app
 app = dash.Dash(__name__, title="Perfect Storm Dashboard")
@@ -225,11 +226,11 @@ def update_dashboard(n_clicks, symbol, period):
     anomalies = anomaly_model.detect_anomalies(df)
     
     # Adaptive thresholds integration
-    thresholds_model = AdaptiveThresholds()
+    thresholds_model = EnhancedAdaptiveThresholds()
     dynamic_thresholds = thresholds_model.compute_thresholds(df)
     
     # Market Regime Analysis and Backtesting – existing integration
-    regime_analyzer = CorrelationRegimeAnalyzer(df)
+    regime_analyzer = MarketRegimeDetection(df)
     market_regimes = regime_analyzer.detect_market_regimes()
     backtester = BacktestingEngine()
     backtest_results = backtester.run_backtest(df, market_regimes)  # Using market regime output as signals

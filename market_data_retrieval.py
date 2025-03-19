@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
+import time
 
 class MarketDataRetriever:
     """
@@ -62,26 +63,33 @@ class MarketDataRetriever:
             url = "https://www.marketwatch.com/market-data/us?mod=market-data-center"
             response = requests.get(url, headers=self.headers)
             if response.status_code != 200:
-                raise Exception(f"Failed to retrieve market breadth data: {response.status_code}")
+                print(f"Failed to retrieve market breadth data. Status code: {response.status_code}")
+                return None
+            print(f"Response content: {response.text[:500]}")  # Debug: first 500 characters of response
             soup = BeautifulSoup(response.text, 'html.parser')
             # Implementation: search for table cells containing 'Advancing' and 'Declining'
             advancing_issues = declining_issues = advancing_volume = declining_volume = None
             tables = soup.find_all('table')
             for table in tables:
                 headers = [th.text.strip() for th in table.find_all('th')]
+                print(f"Found table headers: {headers}")  # Debug: table headers found
                 if 'Advancing' in headers and 'Declining' in headers:
                     rows = table.find_all('tr')
                     for row in rows:
                         cells = row.find_all('td')
                         if len(cells) >= 3:
                             cell_text = cells[0].text.strip()
+                            print(f"Processing row: {cell_text}")  # Debug: current row being processed
                             if 'Issues' in cell_text:
                                 advancing_issues = self._parse_number(cells[1].text)
                                 declining_issues = self._parse_number(cells[2].text)
+                                print(f"Parsed issues: {advancing_issues}, {declining_issues}")  # Debug: parsed issues
                             elif 'Volume' in cell_text:
                                 advancing_volume = self._parse_number(cells[1].text)
                                 declining_volume = self._parse_number(cells[2].text)
+                                print(f"Parsed volume: {advancing_volume}, {declining_volume}")  # Debug: parsed volume
             if advancing_issues is None or declining_issues is None:
+                print("Failed to find advancing/declining issues in response.")
                 return None
             return {
                 'advancing_issues': advancing_issues,
@@ -89,50 +97,66 @@ class MarketDataRetriever:
                 'advancing_volume': advancing_volume,
                 'declining_volume': declining_volume
             }
+        except requests.exceptions.RequestException as e:
+            print(f"Request error occurred: {str(e)}")
+            return None
         except Exception as e:
-            print(f"Error retrieving market breadth data: {e}")
+            print(f"Unexpected error occurred: {str(e)}")
             return None
     
     def get_sentiment_data(self):
         """
         Get investor sentiment data from AAII Investor Sentiment Survey.
         
-        Attempts to scrape from AAII website. If unsuccessful, falls back to local file.
+        Attempts to scrape from AAII website with retry logic. If all attempts fail, falls back to local file.
         
         Returns:
           - Dictionary with keys: 'bullish', 'bearish', 'neutral'
           - None if retrieval fails.
         """
-        try:
-            url = "https://www.aaii.com/sentimentsurvey/sent_results"
-            response = requests.get(url, headers=self.headers)
-            if response.status_code != 200:
-                raise Exception(f"Failed to retrieve sentiment data: {response.status_code}")
-            soup = BeautifulSoup(response.text, 'html.parser')
-            bullish = bearish = neutral = None
-            tables = soup.find_all('table')
-            for table in tables:
-                rows = table.find_all('tr')
-                for row in rows:
-                    cells = row.find_all('td')
-                    if len(cells) >= 2:
-                        if 'Bullish' in cells[0].text:
-                            bullish = self._parse_percentage(cells[1].text)
-                        elif 'Bearish' in cells[0].text:
-                            bearish = self._parse_percentage(cells[1].text)
-                        elif 'Neutral' in cells[0].text:
-                            neutral = self._parse_percentage(cells[1].text)
-            if bullish is None or bearish is None or neutral is None:
-                print("Online sentiment scrape failed; falling back to local file.")
-                return self.get_social_sentiment_data()
-            return {
-                'bullish': bullish,
-                'bearish': bearish,
-                'neutral': neutral
-            }
-        except Exception as e:
-            print(f"Error retrieving sentiment data: {e}")
-            return self.get_social_sentiment_data()
+        max_retries = 3
+        retry_delay = 10  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                url = "https://www.aaii.com/sentimentsurvey/sent_results"
+                response = requests.get(url, headers=self.headers)
+                if response.status_code != 200:
+                    raise Exception(f"Failed to retrieve sentiment data: {response.status_code}")
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                bullish = bearish = neutral = None
+                tables = soup.find_all('table')
+                for table in tables:
+                    rows = table.find_all('tr')
+                    for row in rows:
+                        cells = row.find_all('td')
+                        if len(cells) >= 2:
+                            if 'Bullish' in cells[0].text:
+                                bullish = self._parse_percentage(cells[1].text)
+                            elif 'Bearish' in cells[0].text:
+                                bearish = self._parse_percentage(cells[1].text)
+                            elif 'Neutral' in cells[0].text:
+                                neutral = self._parse_percentage(cells[1].text)
+                
+                if bullish is None or bearish is None or neutral is None:
+                    print("Online sentiment scrape failed; falling back to local file.")
+                    return self.get_social_sentiment_data()
+                
+                return {
+                    'bullish': bullish,
+                    'bearish': bearish,
+                    'neutral': neutral
+                }
+                
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    print(f"Waiting {retry_delay} seconds before retrying...")
+                    time.sleep(retry_delay)
+                else:
+                    print("Max retries reached. Falling back to local file.")
+                    return self.get_social_sentiment_data()
     
     def get_social_sentiment_data(self):
         """
@@ -180,14 +204,40 @@ class MarketDataRetriever:
     @staticmethod
     def get_options_data(symbol, api_key):
         params = {'function': 'OPTION_CHAIN', 'symbol': symbol, 'apikey': api_key}
-        response = requests.get('https://www.alphavantage.co/query', params=params)
-        data = response.json()
-        puts = [option for option in data.get('options', []) if option['type'] == 'put']
-        calls = [option for option in data.get('options', []) if option['type'] == 'call']
-        put_call_ratio = len(puts) / len(calls) if calls else float('inf')
-        return {'put_call_ratio': put_call_ratio, 'implied_volatility': data.get('implied_volatility', 0)}
+        try:
+            response = requests.get('https://www.alphavantage.co/query', params=params)
+            if response.status_code != 200:
+                print(f"API request failed with status code: {response.status_code}")
+                return None
+            data = response.json()
+            if not isinstance(data, dict) or 'Error Message' in data:
+                print(f"API returned error: {data.get('Error Message', 'Unknown error')}")
+                return None
+                
+            # Extract options data
+            options = data.get('options', [])
+            puts = [option for option in options if option.get('type') == 'put']
+            calls = [option for option in options if option.get('type') == 'call']
+            
+            # Calculate put-call ratio
+            put_call_ratio = len(puts) / len(calls) if calls else float('inf')
+            
+            # Extract implied volatility
+            implied_volatility = data.get('implied_volatility', None)
+            
+            return {
+                'put_call_ratio': put_call_ratio,
+                'implied_volatility': implied_volatility
+            }
+        except Exception as e:
+            print(f"Error in get_options_data: {str(e)}")
+            return None
     
     @staticmethod
     def get_institutional_flow(symbol, api_key):
-        # Placeholder – implement as needed.
-        return {"net_flow": 1000000}
+        try:
+            # Placeholder implementation - to be replaced with actual API calls
+            return {"net_flow": 1000000}
+        except Exception as e:
+            print(f"Error in get_institutional_flow: {str(e)}")
+            return {"error": str(e)}
