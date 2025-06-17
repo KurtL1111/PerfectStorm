@@ -245,21 +245,21 @@ class PortfolioOptimizer:
         efficient_frontier = pd.DataFrame(efficient_portfolios)
         
         # Add minimum volatility and maximum Sharpe ratio portfolios
-        efficient_frontier = efficient_frontier.append({
+        efficient_frontier = pd.concat([efficient_frontier, pd.DataFrame([{
             'return': min_vol_return,
             'volatility': min_vol_volatility,
             'sharpe_ratio': min_vol_performance['sharpe_ratio'],
             'weights': min_vol_weights,
             'portfolio_type': 'Minimum Volatility'
-        }, ignore_index=True)
+        }])], ignore_index=True)
         
-        efficient_frontier = efficient_frontier.append({
+        efficient_frontier = pd.concat([efficient_frontier, pd.DataFrame([{
             'return': max_sharpe_return,
             'volatility': max_sharpe_volatility,
             'sharpe_ratio': max_sharpe_performance['sharpe_ratio'],
             'weights': max_sharpe_weights,
             'portfolio_type': 'Maximum Sharpe Ratio'
-        }, ignore_index=True)
+        }])], ignore_index=True)
         
         return efficient_frontier
     
@@ -278,57 +278,40 @@ class PortfolioOptimizer:
         fig, ax = plt.subplots(figsize=figsize)
         
         # Plot efficient frontier
-        ax.scatter(efficient_frontier['volatility'], efficient_frontier['return'], 
+        scatter = ax.scatter(efficient_frontier['volatility'], efficient_frontier['return'], 
                   c=efficient_frontier['sharpe_ratio'], cmap='viridis', 
                   marker='o', s=10, alpha=0.7)
         
         # Highlight minimum volatility and maximum Sharpe ratio portfolios
-        min_vol_idx = efficient_frontier[efficient_frontier['portfolio_type'] == 'Minimum Volatility'].index
-        max_sharpe_idx = efficient_frontier[efficient_frontier['portfolio_type'] == 'Maximum Sharpe Ratio'].index
+        min_vol_portfolio = efficient_frontier[efficient_frontier['portfolio_type'] == 'Minimum Volatility']
+        max_sharpe_portfolio = efficient_frontier[efficient_frontier['portfolio_type'] == 'Maximum Sharpe Ratio']
         
-        if not min_vol_idx.empty:
-            min_vol = efficient_frontier.loc[min_vol_idx[0]]
-            ax.scatter(min_vol['volatility'], min_vol['return'], 
-                      marker='*', color='r', s=200, label='Minimum Volatility')
+        ax.scatter(min_vol_portfolio['volatility'], min_vol_portfolio['return'], 
+                  color='r', marker='*', s=200, label='Minimum Volatility')
         
-        if not max_sharpe_idx.empty:
-            max_sharpe = efficient_frontier.loc[max_sharpe_idx[0]]
-            ax.scatter(max_sharpe['volatility'], max_sharpe['return'], 
-                      marker='*', color='g', s=200, label='Maximum Sharpe Ratio')
+        ax.scatter(max_sharpe_portfolio['volatility'], max_sharpe_portfolio['return'], 
+                  color='g', marker='*', s=200, label='Maximum Sharpe Ratio')
         
-        # Plot capital market line
-        x_min, x_max = ax.get_xlim()
-        y_min = self.risk_free_rate
+        # Add colorbar using the scatter plot handle
+        plt.colorbar(scatter, ax=ax, label='Sharpe Ratio')
         
-        if not max_sharpe_idx.empty:
-            max_sharpe = efficient_frontier.loc[max_sharpe_idx[0]]
-            slope = (max_sharpe['return'] - self.risk_free_rate) / max_sharpe['volatility']
-            y_max = self.risk_free_rate + slope * x_max
-            ax.plot([0, x_max], [self.risk_free_rate, y_max], 'k--', label='Capital Market Line')
-        
-        # Set title and labels
+        # Set labels and title
+        ax.set_xlabel('Volatility (Annualized)')
+        ax.set_ylabel('Return (Annualized)')
         ax.set_title('Efficient Frontier')
-        ax.set_xlabel('Volatility (Standard Deviation)')
-        ax.set_ylabel('Expected Return')
-        
-        # Add colorbar
-        cbar = plt.colorbar(ax.collections[0], ax=ax)
-        cbar.set_label('Sharpe Ratio')
         
         # Add legend
         ax.legend()
         
         # Add grid
-        ax.grid(True, linestyle='--', alpha=0.7)
+        ax.grid(True, alpha=0.3)
         
-        # Adjust layout
-        plt.tight_layout()
-        
+        plt.close(fig)
         return fig
     
-    def plot_portfolio_weights(self, weights, figsize=(10, 6)):
+    def plot_asset_weights(self, weights, figsize=(10, 6)):
         """
-        Plot portfolio weights
+        Plot asset weights
         
         Parameters:
         - weights: Series of asset weights
@@ -340,19 +323,16 @@ class PortfolioOptimizer:
         # Create figure
         fig, ax = plt.subplots(figsize=figsize)
         
-        # Sort weights
-        sorted_weights = weights.sort_values(ascending=False)
-        
         # Plot weights
-        sorted_weights.plot(kind='bar', ax=ax)
+        weights.plot(kind='bar', ax=ax)
         
-        # Set title and labels
-        ax.set_title('Portfolio Weights')
+        # Set labels and title
         ax.set_xlabel('Asset')
         ax.set_ylabel('Weight')
+        ax.set_title('Portfolio Weights')
         
         # Add grid
-        ax.grid(True, axis='y', linestyle='--', alpha=0.7)
+        ax.grid(True, alpha=0.3)
         
         # Rotate x-axis labels
         plt.xticks(rotation=45, ha='right')
@@ -361,64 +341,563 @@ class PortfolioOptimizer:
         plt.tight_layout()
         
         return fig
-
-
-class PositionSizer:
-    """Class for position sizing based on signal strength"""
     
-    def __init__(self, base_position_size=0.1, max_position_size=0.25):
+    def calculate_position_sizes(self, weights, total_capital, signal_strengths=None):
         """
-        Initialize the PositionSizer class
+        Calculate position sizes based on weights and signal strengths
         
         Parameters:
-        - base_position_size: Base position size as fraction of portfolio (default: 0.1 or 10%)
-        - max_position_size: Maximum position size as fraction of portfolio (default: 0.25 or 25%)
-        """
-        self.base_position_size = base_position_size
-        self.max_position_size = max_position_size
-    
-    def calculate_position_size(self, signal_strength, volatility=None, risk_tolerance=1.0):
-        """
-        Calculate position size based on signal strength
-        
-        Parameters:
-        - signal_strength: Signal strength (-1 to 1)
-        - volatility: Asset volatility (default: None)
-        - risk_tolerance: Risk tolerance factor (default: 1.0)
+        - weights: Series of asset weights
+        - total_capital: Total capital to allocate
+        - signal_strengths: Series of signal strengths (default: None, equal strengths)
         
         Returns:
-        - position_size: Position size as fraction of portfolio
+        - position_sizes: Series of position sizes
         """
-        # Calculate base position size adjusted for risk tolerance
-        adjusted_base_size = self.base_position_size * risk_tolerance
+        # If signal strengths not provided, use equal strengths
+        if signal_strengths is None:
+            signal_strengths = pd.Series(1.0, index=weights.index)
         
-        # Calculate maximum position size adjusted for risk tolerance
-        adjusted_max_size = self.max_position_size * risk_tolerance
+        # Normalize signal strengths to sum to 1
+        normalized_signals = signal_strengths / signal_strengths.sum()
         
-        # Calculate position size based on signal strength
-        abs_signal = abs(signal_strength)
-        position_size = adjusted_base_size + (adjusted_max_size - adjusted_base_size) * abs_signal
+        # Adjust weights based on signal strengths
+        adjusted_weights = weights * normalized_signals
         
-        # Adjust for volatility if provided
-        if volatility is not None:
-            # Normalize volatility (assuming average volatility is around 0.2 or 20%)
-            normalized_volatility = volatility / 0.2
-            
-            # Adjust position size inversely with volatility
-            position_size = position_size / normalized_volatility
+        # Normalize adjusted weights to sum to 1
+        adjusted_weights = adjusted_weights / adjusted_weights.sum()
         
-        # Ensure position size is within limits
-        position_size = min(position_size, adjusted_max_size)
+        # Calculate position sizes
+        position_sizes = adjusted_weights * total_capital
         
-        # Determine direction based on signal
-        if signal_strength < 0:
-            position_size = -position_size
-        
-        return position_size
+        return position_sizes
     
-    def calculate_portfolio_positions(self, signals_df, volatilities=None, risk_tolerance=1.0):
+    def calculate_risk_adjusted_position_sizes(self, weights, total_capital, volatilities, 
+                                              target_portfolio_volatility=0.15, max_position_size=None):
         """
-        Calculate position sizes for multiple assets
+        Calculate risk-adjusted position sizes
         
         Parameters:
-        - signals_df: DataFrame with signal strengths for each as<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
+        - weights: Series of asset weights
+        - total_capital: Total capital to allocate
+        - volatilities: Series of asset volatilities
+        - target_portfolio_volatility: Target portfolio volatility (default: 0.15 or 15%)
+        - max_position_size: Maximum position size as percentage of total capital (default: None)
+        
+        Returns:
+        - position_sizes: Series of position sizes
+        """
+        # Calculate risk contribution of each asset
+        risk_contributions = weights * volatilities
+        
+        # Calculate total portfolio risk
+        portfolio_risk = risk_contributions.sum()
+        
+        # Calculate risk adjustment factor
+        risk_adjustment = target_portfolio_volatility / portfolio_risk
+        
+        # Adjust weights based on risk
+        risk_adjusted_weights = weights * risk_adjustment
+        
+        # Calculate position sizes
+        position_sizes = risk_adjusted_weights * total_capital
+        
+        # Apply maximum position size if specified
+        if max_position_size is not None:
+            max_size = total_capital * max_position_size
+            position_sizes = position_sizes.clip(upper=max_size)
+        
+        return position_sizes
+    
+    def calculate_equal_risk_contribution(self, returns_df, total_capital, max_position_size=None):
+        """
+        Calculate position sizes with equal risk contribution
+        
+        Parameters:
+        - returns_df: DataFrame with asset returns (each column is an asset)
+        - total_capital: Total capital to allocate
+        - max_position_size: Maximum position size as percentage of total capital (default: None)
+        
+        Returns:
+        - position_sizes: Series of position sizes
+        """
+        # Calculate portfolio metrics
+        metrics = self.calculate_portfolio_metrics(returns_df)
+        cov_matrix = metrics['cov_matrix']
+        
+        # Get number of assets
+        num_assets = len(returns_df.columns)
+        
+        # Define objective function for equal risk contribution
+        def objective(weights):
+            weights = np.array(weights)
+            portfolio_vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+            risk_contribution = weights * np.dot(cov_matrix, weights) / portfolio_vol
+            return np.sum((risk_contribution - portfolio_vol / num_assets) ** 2)
+        
+        # Set initial weights
+        init_weights = np.array([1.0 / num_assets] * num_assets)
+        
+        # Set bounds for weights
+        bounds = tuple((0.0, 1.0) for _ in range(num_assets))
+        
+        # Set constraint that weights sum to 1
+        constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+        
+        # Optimize weights
+        result = sco.minimize(objective, init_weights, method='SLSQP', 
+                             bounds=bounds, constraints=constraints)
+        
+        # Get optimal weights
+        optimal_weights = pd.Series(result['x'], index=returns_df.columns)
+        
+        # Calculate position sizes
+        position_sizes = optimal_weights * total_capital
+        
+        # Apply maximum position size if specified
+        if max_position_size is not None:
+            max_size = total_capital * max_position_size
+            position_sizes = position_sizes.clip(upper=max_size)
+        
+        return position_sizes
+    
+    def implement_risk_management_rules(self, position_sizes, total_capital, max_drawdown=0.2, 
+                                       stop_loss_pct=0.05, take_profit_pct=0.1):
+        """
+        Implement risk management rules
+        
+        Parameters:
+        - position_sizes: Series of position sizes
+        - total_capital: Total capital to allocate
+        - max_drawdown: Maximum allowed drawdown (default: 0.2 or 20%)
+        - stop_loss_pct: Stop loss percentage (default: 0.05 or 5%)
+        - take_profit_pct: Take profit percentage (default: 0.1 or 10%)
+        
+        Returns:
+        - risk_management: Dictionary with risk management parameters
+        """
+        # Calculate maximum capital at risk
+        max_capital_at_risk = total_capital * max_drawdown
+        
+        # Calculate stop loss amounts
+        stop_loss_amounts = position_sizes * stop_loss_pct
+        
+        # Calculate take profit amounts
+        take_profit_amounts = position_sizes * take_profit_pct
+        
+        # Calculate total capital at risk
+        total_capital_at_risk = stop_loss_amounts.sum()
+        
+        # Adjust position sizes if total capital at risk exceeds maximum
+        if total_capital_at_risk > max_capital_at_risk:
+            adjustment_factor = max_capital_at_risk / total_capital_at_risk
+            adjusted_position_sizes = position_sizes * adjustment_factor
+            adjusted_stop_loss_amounts = stop_loss_amounts * adjustment_factor
+            adjusted_take_profit_amounts = take_profit_amounts * adjustment_factor
+        else:
+            adjusted_position_sizes = position_sizes
+            adjusted_stop_loss_amounts = stop_loss_amounts
+            adjusted_take_profit_amounts = take_profit_amounts
+        
+        # Create risk management dictionary
+        risk_management = {
+            'position_sizes': adjusted_position_sizes,
+            'stop_loss_amounts': adjusted_stop_loss_amounts,
+            'take_profit_amounts': adjusted_take_profit_amounts,
+            'stop_loss_pct': stop_loss_pct,
+            'take_profit_pct': take_profit_pct,
+            'max_drawdown': max_drawdown,
+            'max_capital_at_risk': max_capital_at_risk,
+            'total_capital_at_risk': adjusted_stop_loss_amounts.sum()
+        }
+        
+        return risk_management
+    
+    def calculate_portfolio_var(self, returns_df, weights, confidence_level=0.95, time_horizon=1):
+        """
+        Calculate portfolio Value at Risk (VaR)
+        
+        Parameters:
+        - returns_df: DataFrame with asset returns (each column is an asset)
+        - weights: Series of asset weights
+        - confidence_level: Confidence level for VaR (default: 0.95 or 95%)
+        - time_horizon: Time horizon in days (default: 1)
+        
+        Returns:
+        - var: Value at Risk
+        """
+        # Calculate portfolio returns
+        portfolio_returns = (returns_df * weights).sum(axis=1)
+        
+        # Calculate VaR using historical method
+        var = -np.percentile(portfolio_returns, 100 * (1 - confidence_level)) * np.sqrt(time_horizon)
+        
+        return var
+    
+    def calculate_portfolio_cvar(self, returns_df, weights, confidence_level=0.95, time_horizon=1):
+        """
+        Calculate portfolio Conditional Value at Risk (CVaR)
+        
+        Parameters:
+        - returns_df: DataFrame with asset returns (each column is an asset)
+        - weights: Series of asset weights
+        - confidence_level: Confidence level for CVaR (default: 0.95 or 95%)
+        - time_horizon: Time horizon in days (default: 1)
+        
+        Returns:
+        - cvar: Conditional Value at Risk
+        """
+        # Calculate portfolio returns
+        portfolio_returns = (returns_df * weights).sum(axis=1)
+        
+        # Calculate VaR
+        var = -np.percentile(portfolio_returns, 100 * (1 - confidence_level)) * np.sqrt(time_horizon)
+        
+        # Calculate CVaR (Expected Shortfall)
+        cvar = -portfolio_returns[portfolio_returns < -var / np.sqrt(time_horizon)].mean() * np.sqrt(time_horizon)
+        
+        return cvar
+    
+    def optimize_portfolio_with_risk_constraints(self, returns_df, max_var=0.05, max_cvar=0.07, 
+                                               min_weight=0.0, max_weight=1.0):
+        """
+        Optimize portfolio with risk constraints
+        
+        Parameters:
+        - returns_df: DataFrame with asset returns (each column is an asset)
+        - max_var: Maximum allowed VaR (default: 0.05 or 5%)
+        - max_cvar: Maximum allowed CVaR (default: 0.07 or 7%)
+        - min_weight: Minimum weight for each asset (default: 0.0)
+        - max_weight: Maximum weight for each asset (default: 1.0)
+        
+        Returns:
+        - optimal_weights: Series of optimal asset weights
+        - performance: Dictionary with portfolio performance metrics
+        """
+        # Calculate portfolio metrics
+        metrics = self.calculate_portfolio_metrics(returns_df)
+        mean_returns = metrics['mean_returns']
+        cov_matrix = metrics['cov_matrix']
+        
+        # Get number of assets
+        num_assets = len(mean_returns)
+        
+        # Set initial weights
+        init_weights = np.array([1.0 / num_assets] * num_assets)
+        
+        # Set bounds for weights
+        bounds = tuple((min_weight, max_weight) for _ in range(num_assets))
+        
+        # Define VaR constraint
+        def var_constraint(weights):
+            return max_var - self.calculate_portfolio_var(returns_df, pd.Series(weights, index=returns_df.columns))
+        
+        # Define CVaR constraint
+        def cvar_constraint(weights):
+            return max_cvar - self.calculate_portfolio_cvar(returns_df, pd.Series(weights, index=returns_df.columns))
+        
+        # Set constraints
+        constraints = [
+            {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},  # Weights sum to 1
+            {'type': 'ineq', 'fun': var_constraint},         # VaR constraint
+            {'type': 'ineq', 'fun': cvar_constraint}         # CVaR constraint
+        ]
+        
+        # Maximize Sharpe ratio
+        result = sco.minimize(self.negative_sharpe_ratio, init_weights, 
+                             args=(mean_returns, cov_matrix), method='SLSQP', 
+                             bounds=bounds, constraints=constraints)
+        
+        # Get optimal weights
+        optimal_weights = pd.Series(result['x'], index=returns_df.columns)
+        
+        # Calculate portfolio performance
+        returns, volatility, sharpe = self.portfolio_performance(optimal_weights, mean_returns, cov_matrix)
+        
+        # Calculate VaR and CVaR
+        var = self.calculate_portfolio_var(returns_df, optimal_weights)
+        cvar = self.calculate_portfolio_cvar(returns_df, optimal_weights)
+        
+        # Create performance dictionary
+        performance = {
+            'returns': returns,
+            'volatility': volatility,
+            'sharpe_ratio': sharpe,
+            'var': var,
+            'cvar': cvar
+        }
+        
+        return optimal_weights, performance
+    
+    def rebalance_portfolio(self, current_weights, target_weights, threshold=0.05):
+        """
+        Determine if portfolio rebalancing is needed
+        
+        Parameters:
+        - current_weights: Series of current asset weights
+        - target_weights: Series of target asset weights
+        - threshold: Rebalancing threshold (default: 0.05 or 5%)
+        
+        Returns:
+        - rebalance_needed: Whether rebalancing is needed
+        - rebalance_weights: Series of weights to rebalance to
+        """
+        # Calculate weight differences
+        weight_diff = (current_weights - target_weights).abs()
+        
+        # Check if any weight difference exceeds threshold
+        rebalance_needed = (weight_diff > threshold).any()
+        
+        # Return rebalance information
+        return rebalance_needed, target_weights
+    
+    def generate_portfolio_recommendations(self, returns_df, total_capital, signal_strengths=None, 
+                                          risk_profile='moderate', current_weights=None):
+        """
+        Generate comprehensive portfolio recommendations
+        
+        Parameters:
+        - returns_df: DataFrame with asset returns (each column is an asset)
+        - total_capital: Total capital to allocate
+        - signal_strengths: Series of signal strengths (default: None, equal strengths)
+        - risk_profile: Risk profile ('conservative', 'moderate', 'aggressive', default: 'moderate')
+        - current_weights: Series of current asset weights (default: None)
+        
+        Returns:
+        - recommendations: Dictionary with portfolio recommendations
+        """
+        # Set risk parameters based on risk profile
+        if risk_profile == 'conservative':
+            target_volatility = 0.10  # 10%
+            max_drawdown = 0.15      # 15%
+            stop_loss_pct = 0.03     # 3%
+            take_profit_pct = 0.07   # 7%
+            max_position_size = 0.15 # 15%
+        elif risk_profile == 'moderate':
+            target_volatility = 0.15  # 15%
+            max_drawdown = 0.20      # 20%
+            stop_loss_pct = 0.05     # 5%
+            take_profit_pct = 0.10   # 10%
+            max_position_size = 0.20 # 20%
+        elif risk_profile == 'aggressive':
+            target_volatility = 0.25  # 25%
+            max_drawdown = 0.30      # 30%
+            stop_loss_pct = 0.07     # 7%
+            take_profit_pct = 0.15   # 15%
+            max_position_size = 0.30 # 30%
+        else:
+            raise ValueError(f"Unknown risk profile: {risk_profile}")
+        
+        # Calculate portfolio metrics
+        metrics = self.calculate_portfolio_metrics(returns_df)
+        
+        # Optimize portfolio
+        optimal_weights, performance = self.optimize_portfolio(returns_df)
+        
+        # Calculate position sizes
+        if signal_strengths is not None:
+            position_sizes = self.calculate_position_sizes(optimal_weights, total_capital, signal_strengths)
+        else:
+            position_sizes = optimal_weights * total_capital
+        
+        # Calculate risk-adjusted position sizes
+        risk_adjusted_position_sizes = self.calculate_risk_adjusted_position_sizes(
+            optimal_weights, total_capital, metrics['asset_volatilities'], 
+            target_volatility, max_position_size
+        )
+        
+        # Implement risk management rules
+        risk_management = self.implement_risk_management_rules(
+            risk_adjusted_position_sizes, total_capital, 
+            max_drawdown, stop_loss_pct, take_profit_pct
+        )
+        
+        # Calculate VaR and CVaR
+        var = self.calculate_portfolio_var(returns_df, optimal_weights)
+        cvar = self.calculate_portfolio_cvar(returns_df, optimal_weights)
+        
+        # Check if rebalancing is needed
+        rebalance_needed = False
+        if current_weights is not None:
+            rebalance_needed, _ = self.rebalance_portfolio(current_weights, optimal_weights)
+        
+        # Create recommendations dictionary
+        recommendations = {
+            'optimal_weights': optimal_weights,
+            'performance': performance,
+            'position_sizes': position_sizes,
+            'risk_adjusted_position_sizes': risk_adjusted_position_sizes,
+            'risk_management': risk_management,
+            'var': var,
+            'cvar': cvar,
+            'rebalance_needed': rebalance_needed,
+            'risk_profile': risk_profile
+        }
+        
+        # Store in portfolio history
+        timestamp = pd.Timestamp.now()
+        self.portfolio_history[timestamp] = recommendations
+        
+        return recommendations
+    
+    def plot_portfolio_allocation(self, weights, figsize=(10, 6), kind='pie'):
+        """
+        Plot portfolio allocation
+        
+        Parameters:
+        - weights: Series of asset weights
+        - figsize: Figure size (default: (10, 6))
+        - kind: Plot type ('pie' or 'bar', default: 'pie')
+        
+        Returns:
+        - fig: Matplotlib figure
+        """
+        # Create figure
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        if kind == 'pie':
+            # Plot pie chart
+            weights.plot(kind='pie', ax=ax, autopct='%1.1f%%')
+            
+            # Set title
+            ax.set_title('Portfolio Allocation')
+            
+            # Equal aspect ratio ensures that pie is drawn as a circle
+            ax.set_aspect('equal')
+        
+        elif kind == 'bar':
+            # Plot bar chart
+            weights.plot(kind='bar', ax=ax)
+            
+            # Set labels and title
+            ax.set_xlabel('Asset')
+            ax.set_ylabel('Weight')
+            ax.set_title('Portfolio Allocation')
+            
+            # Add grid
+            ax.grid(True, alpha=0.3)
+            
+            # Rotate x-axis labels
+            plt.xticks(rotation=45, ha='right')
+        
+        else:
+            raise ValueError(f"Unknown plot kind: {kind}")
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        return fig
+    
+    def plot_risk_contribution(self, weights, returns_df, figsize=(10, 6)):
+        """
+        Plot risk contribution of each asset
+        
+        Parameters:
+        - weights: Series of asset weights
+        - returns_df: DataFrame with asset returns (each column is an asset)
+        - figsize: Figure size (default: (10, 6))
+        
+        Returns:
+        - fig: Matplotlib figure
+        """
+        # Calculate portfolio metrics
+        metrics = self.calculate_portfolio_metrics(returns_df)
+        cov_matrix = metrics['cov_matrix']
+        
+        # Calculate portfolio volatility
+        portfolio_vol = np.sqrt(np.dot(weights, np.dot(cov_matrix, weights))) * np.sqrt(252)
+        
+        # Calculate risk contribution
+        risk_contribution = weights * np.dot(cov_matrix, weights) * 252 / portfolio_vol
+        
+        # Normalize to percentage
+        risk_contribution_pct = risk_contribution / risk_contribution.sum() * 100
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # Plot risk contribution
+        risk_contribution_pct.plot(kind='bar', ax=ax)
+        
+        # Set labels and title
+        ax.set_xlabel('Asset')
+        ax.set_ylabel('Risk Contribution (%)')
+        ax.set_title('Portfolio Risk Contribution')
+        
+        # Add grid
+        ax.grid(True, alpha=0.3)
+        
+        # Rotate x-axis labels
+        plt.xticks(rotation=45, ha='right')
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        return fig
+    
+    def generate_portfolio_report(self, returns_df, total_capital, signal_strengths=None, 
+                                 risk_profile='moderate', current_weights=None, filename=None):
+        """
+        Generate comprehensive portfolio report
+        
+        Parameters:
+        - returns_df: DataFrame with asset returns (each column is an asset)
+        - total_capital: Total capital to allocate
+        - signal_strengths: Series of signal strengths (default: None, equal strengths)
+        - risk_profile: Risk profile ('conservative', 'moderate', 'aggressive', default: 'moderate')
+        - current_weights: Series of current asset weights (default: None)
+        - filename: Filename to save the report (default: None, displays the report)
+        
+        Returns:
+        - report: Dictionary with report components
+        """
+        # Generate portfolio recommendations
+        recommendations = self.generate_portfolio_recommendations(
+            returns_df, total_capital, signal_strengths, risk_profile, current_weights
+        )
+        
+        # Calculate efficient frontier
+        efficient_frontier = self.efficient_frontier(returns_df)
+        
+        # Create report components
+        report = {
+            'recommendations': recommendations,
+            'efficient_frontier': efficient_frontier,
+            'returns_df': returns_df
+        }
+        
+        # Generate visualizations
+        figs = {}
+        
+        # Efficient frontier
+        figs['efficient_frontier'] = self.plot_efficient_frontier(efficient_frontier)
+        
+        # Portfolio allocation
+        figs['portfolio_allocation_pie'] = self.plot_portfolio_allocation(
+            recommendations['optimal_weights'], kind='pie'
+        )
+        
+        figs['portfolio_allocation_bar'] = self.plot_portfolio_allocation(
+            recommendations['optimal_weights'], kind='bar'
+        )
+        
+        # Risk contribution
+        figs['risk_contribution'] = self.plot_risk_contribution(
+            recommendations['optimal_weights'], returns_df
+        )
+        
+        # Add visualizations to report
+        report['visualizations'] = figs
+        
+        # Save report if filename provided
+        if filename is not None:
+            # Save visualizations
+            for name, fig in figs.items():
+                fig.savefig(f"{filename}_{name}.png", dpi=300, bbox_inches='tight')
+            
+            # Save report data
+            import pickle
+            with open(f"{filename}_data.pkl", 'wb') as f:
+                pickle.dump(report, f)
+        
+        return report

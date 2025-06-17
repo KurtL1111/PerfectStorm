@@ -1,0 +1,1479 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.1, pytest-8.3.5, pluggy-1.5.0
+rootdir: C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced
+plugins: dash-3.0.4
+collected 75 items
+
+test_components.py ......s...F.FFF.F...F....F.FFFFFFF.FF.F.FFF..ssFFFF.. [ 70%]
+sF.F.FFFFFF..FFFFFFFFF                                                   [100%]
+
+================================== FAILURES ===================================
+___________________________ test_anomaly_detection ____________________________
+
+    def test_anomaly_detection():
+        detector = MarketAnomalyDetection()
+        sample_data = pd.DataFrame({
+            'feature1': [0.1, 0.2, 0.1, 0.3],
+            'feature2': [1.0, 1.1, 0.9, 1.2]
+        })
+        # Pass required feature_cols argument
+>       anomalies = detector.detect_anomalies(sample_data, feature_cols=['feature1', 'feature2'])
+
+test_components.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ml_anomaly_detection_enhanced.MarketAnomalyDetection object at 0x000001676C9AAFD0>
+df =    feature1  feature2
+0       0.1       1.0
+1       0.2       1.1
+2       0.1       0.9
+3       0.3       1.2
+feature_cols = ['feature1', 'feature2'], method = 'ensemble', device = 'cpu'
+
+    def detect_anomalies(self, df, feature_cols, method=None, device='cpu'):
+        """
+        Detect anomalies in market data
+    
+        Parameters:
+        - df: DataFrame with market data
+        - feature_cols: List of feature column names
+        - method: Method for anomaly detection (default: None, use self.anomaly_method)
+        - device: Device to use for inference ('cpu' or 'cuda', default: 'cpu')
+    
+        Returns:
+        - anomaly_scores: Anomaly scores
+        """
+        if method is None:
+            method = self.anomaly_method
+    
+        # Preprocess data
+        features = self.preprocess_data(df, feature_cols)
+    
+        # Calculate anomaly scores based on method
+        if method == 'vae':
+            if self.use_temporal:
+                if self.temporal_vae_model is None:
+                    raise ValueError("Temporal VAE model not trained. Call train_model first.")
+                anomaly_scores = self.calculate_temporal_vae_anomaly_scores(features, device)
+            else:
+                if self.vae_model is None:
+                    raise ValueError("VAE model not trained. Call train_model first.")
+                anomaly_scores = self.calculate_vae_anomaly_scores(features, device)
+    
+        elif method == 'isolation_forest':
+            if self.isolation_forest_model is None:
+                raise ValueError("Isolation Forest model not trained. Call train_model first.")
+            anomaly_scores = self.calculate_isolation_forest_anomaly_scores(features)
+    
+        elif method == 'lof':
+            if self.lof_model is None:
+                raise ValueError("LOF model not trained. Call train_model first.")
+            anomaly_scores = self.calculate_lof_anomaly_scores(features)
+    
+        elif method == 'svm':
+            if self.svm_model is None:
+                raise ValueError("SVM model not trained. Call train_model first.")
+            anomaly_scores = self.calculate_svm_anomaly_scores(features)
+    
+        elif method == 'ensemble':
+            if not all([
+                (self.use_temporal and self.temporal_vae_model is not None) or
+                (not self.use_temporal and self.vae_model is not None),
+                self.isolation_forest_model is not None,
+                self.lof_model is not None,
+                self.svm_model is not None
+            ]):
+>               raise ValueError("Not all ensemble models are trained. Call train_model first.")
+E               ValueError: Not all ensemble models are trained. Call train_model first.
+
+ml_anomaly_detection_enhanced.py:1062: ValueError
+---------------------------- Captured stdout call -----------------------------
+Anomaly Preprocessing: Initial features shape: (4, 2)
+_______________________________ test_clustering _______________________________
+
+    def test_clustering():
+        model = PerfectStormClustering(n_clusters=2)
+        sample_data = pd.DataFrame({
+            'feature1': [0.1, 0.2, 0.8, 0.9],
+            'feature2': [1.0, 1.1, 0.2, 0.3]
+        })
+>       clusters = model.fit_predict(sample_data)
+E       AttributeError: 'PerfectStormClustering' object has no attribute 'fit_predict'
+
+test_components.py:183: AttributeError
+___________________ test_pattern_recognizer_initialization ____________________
+
+    def test_pattern_recognizer_initialization():
+        recognizer = MarketPatternRecognition()
+>       assert recognizer.patterns is not None, "Patterns should be initialized."
+E       AttributeError: 'MarketPatternRecognition' object has no attribute 'patterns'
+
+test_components.py:189: AttributeError
+__________________________ test_pattern_recognition ___________________________
+
+    def test_pattern_recognition():
+        recognizer = MarketPatternRecognition()
+        sample_data = pd.DataFrame({
+            'price': [100, 102, 101, 105, 107]
+        })
+>       patterns = recognizer.predict(sample_data)
+E       TypeError: MarketPatternRecognition.predict() missing 1 required positional argument: 'device'
+
+test_components.py:196: TypeError
+__________________________ test_correlation_analysis __________________________
+
+    def test_correlation_analysis():
+>       analyzer = CorrelationAnalysis(window_size=5)
+E       TypeError: CorrelationAnalysis.__init__() got an unexpected keyword argument 'window_size'
+
+test_components.py:205: TypeError
+_____________________ test_validate_regime_classification _____________________
+
+    def test_validate_regime_classification():
+        """Test the validate_regime_classification function"""
+        detector = MarketRegimeDetection(n_regimes=3)
+    
+        # Create sample features with regimes
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+    
+        # Create features with clear regime characteristics
+        features = pd.DataFrame(index=dates)
+    
+        # Trending up regime (first 30 days)
+        features.loc[dates[:30], 'trend'] = np.random.normal(0.02, 0.005, 30)  # Positive trend
+        features.loc[dates[:30], 'volatility'] = np.random.normal(0.15, 0.02, 30)  # Moderate volatility
+        features.loc[dates[:30], 'autocorr_1'] = np.random.normal(0.3, 0.1, 30)  # Positive autocorrelation
+        features.loc[dates[:30], 'regime'] = 0
+    
+        # Trending down regime (next 30 days)
+        features.loc[dates[30:60], 'trend'] = np.random.normal(-0.02, 0.005, 30)  # Negative trend
+        features.loc[dates[30:60], 'volatility'] = np.random.normal(0.18, 0.03, 30)  # Moderate volatility
+        features.loc[dates[30:60], 'autocorr_1'] = np.random.normal(0.25, 0.1, 30)  # Positive autocorrelation
+        features.loc[dates[30:60], 'regime'] = 1
+    
+        # Ranging regime (last 40 days)
+        features.loc[dates[60:], 'trend'] = np.random.normal(0.001, 0.005, 40)  # Minimal trend
+        features.loc[dates[60:], 'volatility'] = np.random.normal(0.1, 0.02, 40)  # Lower volatility
+        features.loc[dates[60:], 'autocorr_1'] = np.random.normal(-0.2, 0.1, 40)  # Negative autocorrelation
+        features.loc[dates[60:], 'regime'] = 2
+    
+        # Add other required features
+        features['returns'] = np.random.normal(0.001, 0.01, 100)
+        features['returns_skew'] = np.random.normal(0, 0.5, 100)
+        features['momentum'] = np.random.normal(0.005, 0.01, 100)
+        features['mean_reversion'] = np.random.normal(0, 1, 100)
+        features['rsi'] = np.random.normal(50, 10, 100)
+    
+        # Validate regime classification
+        validation_results = detector.validate_regime_classification(features)
+    
+        # Verify validation results
+        assert isinstance(validation_results, dict), "Validation results should be a dictionary"
+        assert 'trend_alignment' in validation_results, "Should include trend alignment"
+        assert 'volatility_alignment' in validation_results, "Should include volatility alignment"
+>       assert 'reversion_alignment' in validation_results, "Should include reversion alignment"
+E       AssertionError: Should include reversion alignment
+E       assert 'reversion_alignment' in {'confidence_scores': {'ranging': np.float64(0.7456611078046809), 'trending_down': np.float64(0.7456611078046809), 'tr...wn': True, 'trending_up': True}, 'volatility_alignment': {'ranging': True, 'trending_down': True, 'trending_up': True}}
+
+test_components.py:365: AssertionError
+__________________ test_calculate_regime_specific_thresholds __________________
+
+    def test_calculate_regime_specific_thresholds():
+        """Test regime-specific threshold calculation in EnhancedAdaptiveThresholds"""
+        thresholds = EnhancedAdaptiveThresholds()
+    
+        # Create sample data with market regimes
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'close': np.random.normal(100, 5, 100),
+            'rsi': np.random.normal(50, 15, 100),
+            'regime': np.random.choice(['trending_up', 'trending_down', 'ranging', 'volatile'], 100)
+        }, index=dates)
+    
+        # Calculate regime-specific thresholds
+        regime_thresholds = thresholds.calculate_regime_specific_thresholds(sample_data, 'rsi')
+    
+        # Verify thresholds
+        assert isinstance(regime_thresholds, dict), "Regime-specific thresholds should be a dictionary"
+>       assert 'trending_up' in regime_thresholds, "Should include trending_up regime"
+E       AssertionError: Should include trending_up regime
+E       assert 'trending_up' in {'lower': np.float64(55.87656667256679), 'upper': np.float64(62.99672824960224)}
+
+test_components.py:468: AssertionError
+---------------------------- Captured stdout call -----------------------------
+Market regime not found in input DataFrame or is all NaN. Detecting internally.
+Calculating thresholds for regime 'volatile' with 56 data points for rsi.
+Not enough data (26 points) for regime 'ranging' for rsi. Using overall statistical thresholds for this regime.
+Not enough data (18 points) for regime 'trending_up' for rsi. Using overall statistical thresholds for this regime.
+Returning thresholds for current regime 'ranging' for rsi.
+___________________ test_backtesting_engine_initialization ____________________
+
+    def test_backtesting_engine_initialization():
+        """Test initialization of BacktestingEngine"""
+        engine = BacktestingEngine(initial_capital=100000, commission=0.001)
+        assert engine.initial_capital == 100000, "Initial capital should be set correctly"
+        assert engine.commission == 0.001, "Commission should be set correctly"
+>       assert engine.positions == {}, "Positions should be initialized as empty dictionary"
+E       AttributeError: 'BacktestingEngine' object has no attribute 'positions'
+
+test_components.py:510: AttributeError
+______________________________ test_run_backtest ______________________________
+
+    def test_run_backtest():
+        """Test running a backtest with BacktestingEngine"""
+        engine = BacktestingEngine(initial_capital=100000, commission=0.001)
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 100),
+            'high': np.random.normal(105, 5, 100),
+            'low': np.random.normal(95, 5, 100),
+            'close': np.random.normal(102, 5, 100),
+            'volume': np.random.normal(1000000, 200000, 100)
+        }, index=dates)
+    
+        # Run backtest
+>       results = engine.run_backtest(sample_data, create_sample_strategy())
+
+test_components.py:548: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtesting_engine.BacktestingEngine object at 0x000001676CCAB4D0>
+df =                   open        high         low       close        volume
+2023-01-01   97.172981  111.986516   95.14788...9.282405  8.528571e+05
+2023-04-10  100.775988  108.762159  100.087034   96.533452  1.252114e+06
+
+[100 rows x 5 columns]
+strategy_func = <function create_sample_strategy.<locals>.sample_strategy at 0x000001676D1C56C0>
+strategy_params = None, benchmark_col = None, rebalance_freq = None
+risk_manager = None, regime_col = 'market_regime'
+
+    def run_backtest(self, df, strategy_func=None, strategy_params=None, benchmark_col=None,
+                     rebalance_freq=None, risk_manager=None, regime_col='market_regime'): # Added regime_col default
+        """
+        Run a backtest on historical data using pre-calculated signals.
+    
+        Args:
+            df (pd.DataFrame): DataFrame WITH 'buy_signal' and 'sell_signal' columns.
+                               Optionally includes 'signal_strength' and regime_col.
+            strategy_func: DEPRECATED - signals should be pre-calculated. Kept for backward compat.
+            strategy_params: DEPRECATED.
+            benchmark_col (str, optional): Column for benchmark comparison. Defaults to None.
+            rebalance_freq (str, optional): Rebalancing frequency ('daily', 'weekly', 'monthly'). Defaults to None.
+            risk_manager (callable, optional): Custom risk management function. Defaults to None.
+            regime_col (str, optional): Column name containing market regime information. Defaults to 'market_regime'.
+    
+        Returns:
+            pd.DataFrame: DataFrame with backtest results.
+        """
+        # (Remove strategy_func related logic - signals are now external)
+        df_backtest = df.copy()
+    
+        # Ensure required signal columns exist
+        if 'buy_signal' not in df_backtest.columns or 'sell_signal' not in df_backtest.columns:
+>           raise ValueError("Input DataFrame must contain 'buy_signal' and 'sell_signal' columns.")
+E           ValueError: Input DataFrame must contain 'buy_signal' and 'sell_signal' columns.
+
+backtesting_engine.py:82: ValueError
+_____________________ test_calculate_performance_metrics ______________________
+
+    def test_calculate_performance_metrics():
+        """Test calculation of performance metrics in BacktestingEngine"""
+        engine = BacktestingEngine(initial_capital=100000, commission=0.001)
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 100),
+            'high': np.random.normal(105, 5, 100),
+            'low': np.random.normal(95, 5, 100),
+            'close': np.random.normal(102, 5, 100),
+            'volume': np.random.normal(1000000, 200000, 100)
+        }, index=dates)
+    
+        # Run backtest
+>       engine.run_backtest(sample_data, create_sample_strategy())
+
+test_components.py:572: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtesting_engine.BacktestingEngine object at 0x000001676C9AAFD0>
+df =                   open        high         low       close        volume
+2023-01-01  103.856330  108.439682   96.62643...0.591999  7.970468e+05
+2023-04-10   97.749903  100.401976   86.714722  101.683800  8.990158e+05
+
+[100 rows x 5 columns]
+strategy_func = <function create_sample_strategy.<locals>.sample_strategy at 0x000001676D1C72E0>
+strategy_params = None, benchmark_col = None, rebalance_freq = None
+risk_manager = None, regime_col = 'market_regime'
+
+    def run_backtest(self, df, strategy_func=None, strategy_params=None, benchmark_col=None,
+                     rebalance_freq=None, risk_manager=None, regime_col='market_regime'): # Added regime_col default
+        """
+        Run a backtest on historical data using pre-calculated signals.
+    
+        Args:
+            df (pd.DataFrame): DataFrame WITH 'buy_signal' and 'sell_signal' columns.
+                               Optionally includes 'signal_strength' and regime_col.
+            strategy_func: DEPRECATED - signals should be pre-calculated. Kept for backward compat.
+            strategy_params: DEPRECATED.
+            benchmark_col (str, optional): Column for benchmark comparison. Defaults to None.
+            rebalance_freq (str, optional): Rebalancing frequency ('daily', 'weekly', 'monthly'). Defaults to None.
+            risk_manager (callable, optional): Custom risk management function. Defaults to None.
+            regime_col (str, optional): Column name containing market regime information. Defaults to 'market_regime'.
+    
+        Returns:
+            pd.DataFrame: DataFrame with backtest results.
+        """
+        # (Remove strategy_func related logic - signals are now external)
+        df_backtest = df.copy()
+    
+        # Ensure required signal columns exist
+        if 'buy_signal' not in df_backtest.columns or 'sell_signal' not in df_backtest.columns:
+>           raise ValueError("Input DataFrame must contain 'buy_signal' and 'sell_signal' columns.")
+E           ValueError: Input DataFrame must contain 'buy_signal' and 'sell_signal' columns.
+
+backtesting_engine.py:82: ValueError
+__________________________ test_optimize_parameters ___________________________
+concurrent.futures.process._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\klamo\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\queues.py", line 262, in _feed
+    obj = _ForkingPickler.dumps(obj)
+  File "C:\Users\klamo\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+AttributeError: Can't get local object 'BacktestingEngine.optimize_parameters.<locals>.evaluate_params'
+"""
+
+The above exception was the direct cause of the following exception:
+
+    def test_optimize_parameters():
+        """Test parameter optimization in BacktestingEngine"""
+        engine = BacktestingEngine(initial_capital=100000, commission=0.001)
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 100),
+            'high': np.random.normal(105, 5, 100),
+            'low': np.random.normal(95, 5, 100),
+            'close': np.random.normal(102, 5, 100),
+            'volume': np.random.normal(1000000, 200000, 100)
+        }, index=dates)
+    
+        # Define parameter grid
+        param_grid = {
+            'sma_short': [3, 5, 7],
+            'sma_long': [15, 20, 25]
+        }
+    
+        # Optimize parameters
+>       best_params, best_metric, all_results = engine.optimize_parameters(
+            sample_data, create_sample_strategy(), param_grid, metric='sharpe_ratio'
+        )
+
+test_components.py:607: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtesting_engine.py:578: in optimize_parameters
+    results = list(tqdm(executor.map(evaluate_params, param_combinations), total=n_combinations))
+..\AppData\Local\Programs\Python\Python313\Lib\site-packages\tqdm\std.py:1181: in __iter__
+    for obj in iterable:
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\process.py:617: in _chain_from_iterable_of_lists
+    for element in iterable:
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:619: in result_iterator
+    yield _result_or_cancel(fs.pop())
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:317: in _result_or_cancel
+    return fut.result(timeout)
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+..\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\queues.py:262: in _feed
+    obj = _ForkingPickler.dumps(obj)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'multiprocessing.reduction.ForkingPickler'>
+obj = <concurrent.futures.process._CallItem object at 0x000001676CC7DFD0>
+protocol = None
+
+    @classmethod
+    def dumps(cls, obj, protocol=None):
+        buf = io.BytesIO()
+>       cls(buf, protocol).dump(obj)
+E       AttributeError: Can't get local object 'BacktestingEngine.optimize_parameters.<locals>.evaluate_params'
+
+..\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\reduction.py:51: AttributeError
+---------------------------- Captured stdout call -----------------------------
+Optimizing parameters with 9 combinations
+---------------------------- Captured stderr call -----------------------------
+  0%|          | 0/9 [00:00<?, ?it/s]  0%|          | 0/9 [00:00<?, ?it/s]
+_______________________ test_walk_forward_optimization ________________________
+concurrent.futures.process._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\klamo\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\queues.py", line 262, in _feed
+    obj = _ForkingPickler.dumps(obj)
+  File "C:\Users\klamo\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+AttributeError: Can't get local object 'BacktestingEngine.optimize_parameters.<locals>.evaluate_params'
+"""
+
+The above exception was the direct cause of the following exception:
+
+    def test_walk_forward_optimization():
+        """Test walk-forward optimization in BacktestingEngine"""
+        engine = BacktestingEngine(initial_capital=100000, commission=0.001)
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=200, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 200),
+            'high': np.random.normal(105, 5, 200),
+            'low': np.random.normal(95, 5, 200),
+            'close': np.random.normal(102, 5, 200),
+            'volume': np.random.normal(1000000, 200000, 200)
+        }, index=dates)
+    
+        # Define parameter grid
+        param_grid = {
+            'sma_short': [3, 5, 7],
+            'sma_long': [15, 20, 25]
+        }
+    
+        # Run walk-forward optimization
+>       wfo_results = engine.walk_forward_optimization(
+            sample_data, create_sample_strategy(), param_grid, window_size=50, step_size=25
+        )
+
+test_components.py:640: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtesting_engine.py:660: in walk_forward_optimization
+    best_params, _ = self.optimize_parameters(in_sample, strategy_func, param_grid, metric, n_jobs, verbose=False)
+backtesting_engine.py:580: in optimize_parameters
+    results = list(executor.map(evaluate_params, param_combinations))
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\process.py:617: in _chain_from_iterable_of_lists
+    for element in iterable:
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:619: in result_iterator
+    yield _result_or_cancel(fs.pop())
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:317: in _result_or_cancel
+    return fut.result(timeout)
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:449: in result
+    return self.__get_result()
+..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+..\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\queues.py:262: in _feed
+    obj = _ForkingPickler.dumps(obj)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'multiprocessing.reduction.ForkingPickler'>
+obj = <concurrent.futures.process._CallItem object at 0x000001676CC9D650>
+protocol = None
+
+    @classmethod
+    def dumps(cls, obj, protocol=None):
+        buf = io.BytesIO()
+>       cls(buf, protocol).dump(obj)
+E       AttributeError: Can't get local object 'BacktestingEngine.optimize_parameters.<locals>.evaluate_params'
+
+..\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\reduction.py:51: AttributeError
+---------------------------- Captured stdout call -----------------------------
+Performing walk-forward optimization with 7 windows
+Window 1/7: In-sample 2023-01-01 00:00:00 to 2023-02-19 00:00:00, Out-of-sample 2023-02-20 00:00:00 to 2023-03-16 00:00:00
+_________________________ test_monte_carlo_simulation _________________________
+
+    def test_monte_carlo_simulation():
+        """Test Monte Carlo simulation in BacktestingEngine"""
+        engine = BacktestingEngine(initial_capital=100000, commission=0.001)
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 100),
+            'high': np.random.normal(105, 5, 100),
+            'low': np.random.normal(95, 5, 100),
+            'close': np.random.normal(102, 5, 100),
+            'volume': np.random.normal(1000000, 200000, 100)
+        }, index=dates)
+    
+        # Run backtest
+>       engine.run_backtest(sample_data, create_sample_strategy())
+
+test_components.py:666: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtesting_engine.BacktestingEngine object at 0x000001676CCAB390>
+df =                   open        high         low       close        volume
+2023-01-01   95.772694  107.794947   97.54788...3.542217  7.921819e+05
+2023-04-10  100.354359  104.839257   93.059177  105.686913  9.548269e+05
+
+[100 rows x 5 columns]
+strategy_func = <function create_sample_strategy.<locals>.sample_strategy at 0x000001676D1C7060>
+strategy_params = None, benchmark_col = None, rebalance_freq = None
+risk_manager = None, regime_col = 'market_regime'
+
+    def run_backtest(self, df, strategy_func=None, strategy_params=None, benchmark_col=None,
+                     rebalance_freq=None, risk_manager=None, regime_col='market_regime'): # Added regime_col default
+        """
+        Run a backtest on historical data using pre-calculated signals.
+    
+        Args:
+            df (pd.DataFrame): DataFrame WITH 'buy_signal' and 'sell_signal' columns.
+                               Optionally includes 'signal_strength' and regime_col.
+            strategy_func: DEPRECATED - signals should be pre-calculated. Kept for backward compat.
+            strategy_params: DEPRECATED.
+            benchmark_col (str, optional): Column for benchmark comparison. Defaults to None.
+            rebalance_freq (str, optional): Rebalancing frequency ('daily', 'weekly', 'monthly'). Defaults to None.
+            risk_manager (callable, optional): Custom risk management function. Defaults to None.
+            regime_col (str, optional): Column name containing market regime information. Defaults to 'market_regime'.
+    
+        Returns:
+            pd.DataFrame: DataFrame with backtest results.
+        """
+        # (Remove strategy_func related logic - signals are now external)
+        df_backtest = df.copy()
+    
+        # Ensure required signal columns exist
+        if 'buy_signal' not in df_backtest.columns or 'sell_signal' not in df_backtest.columns:
+>           raise ValueError("Input DataFrame must contain 'buy_signal' and 'sell_signal' columns.")
+E           ValueError: Input DataFrame must contain 'buy_signal' and 'sell_signal' columns.
+
+backtesting_engine.py:82: ValueError
+_________________________ test_analyze_market_regimes _________________________
+
+    def test_analyze_market_regimes():
+        """Test market regime analysis in BacktestingEngine"""
+        engine = BacktestingEngine(initial_capital=100000, commission=0.001)
+    
+        # Create sample data with regimes
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 100),
+            'high': np.random.normal(105, 5, 100),
+            'low': np.random.normal(95, 5, 100),
+            'close': np.random.normal(102, 5, 100),
+            'volume': np.random.normal(1000000, 200000, 100),
+            'regime': np.random.choice(['trending_up', 'trending_down', 'ranging', 'volatile'], 100)
+        }, index=dates)
+    
+        # Analyze market regimes
+>       regime_results = engine.analyze_market_regimes(
+            sample_data, create_sample_strategy()
+        )
+
+test_components.py:696: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtesting_engine.BacktestingEngine object at 0x000001676CCAA710>
+df =                   open        high  ...        volume         regime
+2023-01-01   98.169676  103.711557  ...  1.196172....068309e+06  trending_down
+2023-04-10  102.211493   98.621507  ...  8.211005e+05        ranging
+
+[100 rows x 6 columns]
+strategy_func = <function create_sample_strategy.<locals>.sample_strategy at 0x000001676D1C7560>
+strategy_params = None, regime_col = None, n_regimes = 3
+
+    def analyze_market_regimes(self, df, strategy_func, strategy_params=None,
+                              regime_col=None, n_regimes=3):
+        """
+        Analyze strategy performance across different market regimes
+    
+        Parameters:
+        - df: DataFrame with market data
+        - strategy_func: Function that generates buy/sell signals
+        - strategy_params: Dictionary of parameters for the strategy function (default: None)
+        - regime_col: Column with market regime labels (default: None)
+        - n_regimes: Number of regimes to detect if regime_col is None (default: 3)
+    
+        Returns:
+        - regime_analysis: Dictionary with regime analysis results
+        """
+        # Make a copy of the DataFrame
+        df_regime = df.copy()
+    
+        # Detect market regimes if not provided
+        if regime_col is None or regime_col not in df_regime.columns:
+            # Calculate features for regime detection
+            df_regime['returns'] = df_regime['close'].pct_change()
+            df_regime['volatility'] = df_regime['returns'].rolling(window=20).std() * np.sqrt(252)
+            df_regime['trend'] = df_regime['close'].rolling(window=50).mean().pct_change(20)
+    
+            # Drop NaN values
+            df_features = df_regime.dropna()[['volatility', 'trend']]
+    
+            # Standardize features
+            features_std = (df_features - df_features.mean()) / df_features.std()
+    
+            # Apply KMeans clustering
+            kmeans = KMeans(n_clusters=n_regimes, random_state=42, n_init=10)
+            df_regime.loc[df_features.index, 'regime_cluster'] = kmeans.fit_predict(features_std)
+    
+            # Determine regime characteristics
+            regime_stats = df_regime.groupby('regime_cluster')[['volatility', 'trend']].mean()
+    
+            # Label regimes
+            regime_labels = [''] * n_regimes
+    
+            # Identify trending regime (highest absolute trend)
+            trending_idx = abs(regime_stats['trend']).idxmax()
+            if regime_stats.loc[trending_idx, 'trend'] > 0:
+                regime_labels[trending_idx] = 'trending_up'
+            else:
+>               regime_labels[trending_idx] = 'trending_down'
+E               TypeError: list indices must be integers or slices, not numpy.float64
+
+backtesting_engine.py:827: TypeError
+______________________ test_calculate_correlation_matrix ______________________
+
+    def test_calculate_correlation_matrix():
+        """Test calculation of correlation matrix in CorrelationAnalysis"""
+        analyzer = CorrelationAnalysis()
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'indicator1': np.random.normal(0, 1, 100),
+            'indicator2': np.random.normal(0, 1, 100),
+            'indicator3': np.random.normal(0, 1, 100)
+        }, index=dates)
+    
+        # Calculate correlation matrix
+>       corr_matrix = analyzer.calculate_correlation_matrix(sample_data, ['indicator1', 'indicator2', 'indicator3'])
+
+test_components.py:726: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+correlation_analysis.py:112: in calculate_correlation_matrix
+    corr_matrix = df_indicators.corr(method=method)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self =             indicator1  indicator2  indicator3
+2023-01-01   -0.239215    0.443902    0.356884
+2023-01-02   -0.998987  ...7
+2023-04-09   -0.376896   -0.458831   -0.427481
+2023-04-10   -0.695205   -0.301272    1.070710
+
+[100 rows x 3 columns]
+method = ['pearson', 'spearman', 'kendall'], min_periods = 1
+numeric_only = False
+
+    def corr(
+        self,
+        method: CorrelationMethod = "pearson",
+        min_periods: int = 1,
+        numeric_only: bool = False,
+    ) -> DataFrame:
+        """
+        Compute pairwise correlation of columns, excluding NA/null values.
+    
+        Parameters
+        ----------
+        method : {'pearson', 'kendall', 'spearman'} or callable
+            Method of correlation:
+    
+            * pearson : standard correlation coefficient
+            * kendall : Kendall Tau correlation coefficient
+            * spearman : Spearman rank correlation
+            * callable: callable with input two 1d ndarrays
+                and returning a float. Note that the returned matrix from corr
+                will have 1 along the diagonals and will be symmetric
+                regardless of the callable's behavior.
+        min_periods : int, optional
+            Minimum number of observations required per pair of columns
+            to have a valid result. Currently only available for Pearson
+            and Spearman correlation.
+        numeric_only : bool, default False
+            Include only `float`, `int` or `boolean` data.
+    
+            .. versionadded:: 1.5.0
+    
+            .. versionchanged:: 2.0.0
+                The default value of ``numeric_only`` is now ``False``.
+    
+        Returns
+        -------
+        DataFrame
+            Correlation matrix.
+    
+        See Also
+        --------
+        DataFrame.corrwith : Compute pairwise correlation with another
+            DataFrame or Series.
+        Series.corr : Compute the correlation between two Series.
+    
+        Notes
+        -----
+        Pearson, Kendall and Spearman correlation are currently computed using pairwise complete observations.
+    
+        * `Pearson correlation coefficient <https://en.wikipedia.org/wiki/Pearson_correlation_coefficient>`_
+        * `Kendall rank correlation coefficient <https://en.wikipedia.org/wiki/Kendall_rank_correlation_coefficient>`_
+        * `Spearman's rank correlation coefficient <https://en.wikipedia.org/wiki/Spearman%27s_rank_correlation_coefficient>`_
+    
+        Examples
+        --------
+        >>> def histogram_intersection(a, b):
+        ...     v = np.minimum(a, b).sum().round(decimals=1)
+        ...     return v
+        >>> df = pd.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        ...                   columns=['dogs', 'cats'])
+        >>> df.corr(method=histogram_intersection)
+              dogs  cats
+        dogs   1.0   0.3
+        cats   0.3   1.0
+    
+        >>> df = pd.DataFrame([(1, 1), (2, np.nan), (np.nan, 3), (4, 4)],
+        ...                   columns=['dogs', 'cats'])
+        >>> df.corr(min_periods=3)
+              dogs  cats
+        dogs   1.0   NaN
+        cats   NaN   1.0
+        """  # noqa: E501
+        data = self._get_numeric_data() if numeric_only else self
+        cols = data.columns
+        idx = cols.copy()
+        mat = data.to_numpy(dtype=float, na_value=np.nan, copy=False)
+    
+        if method == "pearson":
+            correl = libalgos.nancorr(mat, minp=min_periods)
+        elif method == "spearman":
+            correl = libalgos.nancorr_spearman(mat, minp=min_periods)
+        elif method == "kendall" or callable(method):
+            if min_periods is None:
+                min_periods = 1
+            mat = mat.T
+            corrf = nanops.get_corr_func(method)
+            K = len(cols)
+            correl = np.empty((K, K), dtype=float)
+            mask = np.isfinite(mat)
+            for i, ac in enumerate(mat):
+                for j, bc in enumerate(mat):
+                    if i > j:
+                        continue
+    
+                    valid = mask[i] & mask[j]
+                    if valid.sum() < min_periods:
+                        c = np.nan
+                    elif i == j:
+                        c = 1.0
+                    elif not valid.all():
+                        c = corrf(ac[valid], bc[valid])
+                    else:
+                        c = corrf(ac, bc)
+                    correl[i, j] = c
+                    correl[j, i] = c
+        else:
+>           raise ValueError(
+                "method must be either 'pearson', "
+                "'spearman', 'kendall', or a callable, "
+                f"'{method}' was supplied"
+            )
+E           ValueError: method must be either 'pearson', 'spearman', 'kendall', or a callable, '['pearson', 'spearman', 'kendall']' was supplied
+
+..\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\core\frame.py:11080: ValueError
+_____________________ test_calculate_rolling_correlations _____________________
+
+    def test_calculate_rolling_correlations():
+        """Test calculation of rolling correlations in CorrelationAnalysis"""
+        analyzer = CorrelationAnalysis(lookback_period=20)
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'indicator1': np.random.normal(0, 1, 100),
+            'indicator2': np.random.normal(0, 1, 100)
+        }, index=dates)
+    
+        # Calculate rolling correlations
+>       rolling_corr = analyzer.calculate_rolling_correlations(sample_data, ['indicator1', 'indicator2'], window=20)
+
+test_components.py:746: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <correlation_analysis.CorrelationAnalysis object at 0x000001676C9C7E10>
+df =             indicator1  indicator2
+2023-01-01   -0.785972   -0.294658
+2023-01-02   -0.120787    0.839470
+2023-01-03   ...8    0.648816    0.304257
+2023-04-09    1.235958    0.495583
+2023-04-10    0.785197   -0.623733
+
+[100 rows x 2 columns]
+indicators = ['indicator1', 'indicator2'], window = 20
+method = ['pearson', 'spearman', 'kendall']
+
+    def calculate_rolling_correlations(self, df, indicators=None, window=None, method=None):
+        """
+        Calculate rolling correlations between indicators
+    
+        Parameters:
+        - df: DataFrame with market data and indicators
+        - indicators: List of indicator column names (default: None, will auto-select all numeric columns except target)
+        - window: Rolling window size (default: None, use self.lookback_period)
+        - method: Correlation method (default: None, use self.correlation_method)
+    
+        Returns:
+        - rolling_corr: Dictionary of rolling correlation DataFrames
+        """
+        if window is None:
+            window = self.lookback_period
+        if method is None:
+            method = self.correlation_method
+        if indicators is None:
+            indicators = [col for col in df.select_dtypes(include=[np.number]).columns if col not in ['target', 'returns', 'label']]
+        df_indicators = df[indicators].copy()
+        rolling_corr = {}
+        for i in range(len(indicators)):
+            for j in range(i+1, len(indicators)):
+                ind1 = indicators[i]
+                ind2 = indicators[j]
+>               rolling_corr[(ind1, ind2)] = df_indicators[ind1].rolling(window=window).corr(df_indicators[ind2], method=method)
+E               TypeError: Rolling.corr() got an unexpected keyword argument 'method'
+
+correlation_analysis.py:145: TypeError
+______________________ test_calculate_feature_importance ______________________
+
+    def test_calculate_feature_importance():
+        """Test calculation of feature importance in CorrelationAnalysis"""
+        analyzer = CorrelationAnalysis()
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'indicator1': np.random.normal(0, 1, 100),
+            'indicator2': np.random.normal(0, 1, 100),
+            'indicator3': np.random.normal(0, 1, 100),
+            'target': np.random.normal(0, 1, 100)
+        }, index=dates)
+    
+        # Calculate feature importance
+        importance = analyzer.calculate_feature_importance(
+            sample_data, ['indicator1', 'indicator2', 'indicator3'], 'target', method='random_forest'
+        )
+    
+        # Verify feature importance
+>       assert isinstance(importance, dict), "Feature importance should be a dictionary"
+E       AssertionError: Feature importance should be a dictionary
+E       assert False
+E        +  where False = isinstance(indicator1    0.354759\nindicator2    0.368093\nindicator3    0.277149\ndtype: float64, dict)
+
+test_components.py:794: AssertionError
+________________________ test_calculate_signal_weights ________________________
+
+    def test_calculate_signal_weights():
+        """Test calculation of signal weights in CorrelationAnalysis"""
+        analyzer = CorrelationAnalysis()
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'indicator1': np.random.normal(0, 1, 100),
+            'indicator2': np.random.normal(0, 1, 100),
+            'indicator3': np.random.normal(0, 1, 100),
+            'target': np.random.normal(0, 1, 100)
+        }, index=dates)
+    
+        # Calculate signal weights
+        weights = analyzer.calculate_signal_weights(
+            sample_data, ['indicator1', 'indicator2', 'indicator3'], 'target'
+        )
+    
+        # Verify weights
+>       assert isinstance(weights, dict), "Signal weights should be a dictionary"
+E       AssertionError: Signal weights should be a dictionary
+E       assert False
+E        +  where False = isinstance(indicator1    1.0\nindicator2    0.0\nindicator3    0.0\ndtype: float64, dict)
+
+test_components.py:848: AssertionError
+_______________________ test_calculate_weighted_signal ________________________
+
+    def test_calculate_weighted_signal():
+        """Test calculation of weighted signal in CorrelationAnalysis"""
+        analyzer = CorrelationAnalysis()
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'signal1': np.random.choice([-1, 0, 1], 100),
+            'signal2': np.random.choice([-1, 0, 1], 100),
+            'signal3': np.random.choice([-1, 0, 1], 100)
+        }, index=dates)
+    
+        # Define weights
+        weights = {'signal1': 0.5, 'signal2': 0.3, 'signal3': 0.2}
+    
+        # Calculate weighted signal
+>       weighted_signal = analyzer.calculate_weighted_signal(
+            sample_data, ['signal1', 'signal2', 'signal3'], weights
+        )
+
+test_components.py:870: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+correlation_analysis.py:408: in calculate_weighted_signal
+    if not all(ind in weights.index for ind in indicators):
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+.0 = <list_iterator object at 0x000001676CB24CD0>
+
+>   if not all(ind in weights.index for ind in indicators):
+E   AttributeError: 'dict' object has no attribute 'index'
+
+correlation_analysis.py:408: AttributeError
+__________________ test_ml_anomaly_detection_initialization ___________________
+
+    def test_ml_anomaly_detection_initialization():
+        """Test initialization of MarketAnomalyDetection"""
+        detector = MarketAnomalyDetection(latent_size=10, hidden_size=128)
+        assert detector.latent_size == 10, "Latent size should be set correctly"
+        assert detector.hidden_size == 128, "Hidden size should be set correctly"
+>       assert detector.model is not None, "Model should be initialized"
+E       AssertionError: Model should be initialized
+E       assert None is not None
+E        +  where None = <ml_anomaly_detection_enhanced.MarketAnomalyDetection object at 0x000001676CCAB750>.model
+
+test_components.py:885: AssertionError
+_________________________ test_train_isolation_forest _________________________
+
+    def test_train_isolation_forest():
+        """Test Isolation Forest training in MarketAnomalyDetection"""
+        detector = MarketAnomalyDetection()
+    
+        # Create sample features
+        features = np.random.normal(0, 1, (100, 3))
+    
+        # Train Isolation Forest
+        detector.train_isolation_forest(features)
+    
+        # Verify trained model
+>       assert detector.isolation_forest is not None, "Isolation Forest model should be initialized"
+E       AttributeError: 'MarketAnomalyDetection' object has no attribute 'isolation_forest'. Did you mean: 'isolation_forest_model'?
+
+test_components.py:967: AttributeError
+____________________________ test_detect_anomalies ____________________________
+
+    def test_detect_anomalies():
+        """Test anomaly detection in MarketAnomalyDetection"""
+        detector = MarketAnomalyDetection()
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'feature1': np.random.normal(0, 1, 100),
+            'feature2': np.random.normal(0, 1, 100),
+            'feature3': np.random.normal(0, 1, 100)
+        }, index=dates)
+    
+        # Detect anomalies
+>       anomalies = detector.detect(sample_data, feature_cols=['feature1', 'feature2', 'feature3'])
+E       AttributeError: 'MarketAnomalyDetection' object has no attribute 'detect'
+
+test_components.py:982: AttributeError
+_________________ test_ml_pattern_recognition_initialization __________________
+
+    def test_ml_pattern_recognition_initialization():
+        """Test initialization of MarketPatternRecognition"""
+        recognizer = MarketPatternRecognition(sequence_length=20, hidden_size=64)
+        assert recognizer.sequence_length == 20, "Sequence length should be set correctly"
+        assert recognizer.hidden_size == 64, "Hidden size should be set correctly"
+>       assert recognizer.patterns is not None, "Patterns should be initialized"
+E       AttributeError: 'MarketPatternRecognition' object has no attribute 'patterns'
+
+test_components.py:996: AttributeError
+________________________ test_preprocess_data_pattern _________________________
+
+    def test_preprocess_data_pattern():
+        """Test data preprocessing in MarketPatternRecognition"""
+        recognizer = MarketPatternRecognition()
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 100),
+            'high': np.random.normal(105, 5, 100),
+            'low': np.random.normal(95, 5, 100),
+            'close': np.random.normal(102, 5, 100),
+            'volume': np.random.normal(1000000, 200000, 100)
+        }, index=dates)
+    
+        # Preprocess data
+>       X_train, y_train, X_test, y_test = recognizer.preprocess_data(
+            sample_data,
+            feature_cols=['open', 'high', 'low', 'close', 'volume'],
+            target_col='close'
+        )
+E       ValueError: too many values to unpack (expected 4)
+
+test_components.py:1013: ValueError
+___________________________ test_recognize_patterns ___________________________
+
+    def test_recognize_patterns():
+        """Test pattern recognition in MarketPatternRecognition"""
+        recognizer = MarketPatternRecognition()
+    
+        # Create sample data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        sample_data = pd.DataFrame({
+            'open': np.random.normal(100, 5, 100),
+            'high': np.random.normal(105, 5, 100),
+            'low': np.random.normal(95, 5, 100),
+            'close': np.random.normal(102, 5, 100),
+            'volume': np.random.normal(1000000, 200000, 100)
+        }, index=dates)
+    
+        # Recognize patterns
+>       patterns = recognizer.recognize(sample_data)
+E       AttributeError: 'MarketPatternRecognition' object has no attribute 'recognize'
+
+test_components.py:1094: AttributeError
+______________________ test_calculate_portfolio_metrics _______________________
+
+    def test_calculate_portfolio_metrics():
+        """Test calculation of portfolio metrics in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Create sample returns data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        returns_data = pd.DataFrame({
+            'asset1': np.random.normal(0.001, 0.01, 100),
+            'asset2': np.random.normal(0.002, 0.015, 100),
+            'asset3': np.random.normal(0.0015, 0.012, 100)
+        }, index=dates)
+    
+        # Calculate portfolio metrics
+        metrics = optimizer.calculate_portfolio_metrics(returns_data)
+    
+        # Verify metrics
+        assert isinstance(metrics, dict), "Portfolio metrics should be a dictionary"
+        assert 'mean_returns' in metrics, "Metrics should include mean returns"
+        assert 'cov_matrix' in metrics, "Metrics should include covariance matrix"
+>       assert 'correlation_matrix' in metrics, "Metrics should include correlation matrix"
+E       AssertionError: Metrics should include correlation matrix
+E       assert 'correlation_matrix' in {'ann_cov_matrix':           asset1    asset2    asset3\nasset1  0.025925 -0.001831 -0.002234\nasset2 -0.001831  0.05507...t3\nasset1  1.000000 -0.048470 -0.074779\nasset2 -0.048470  1.000000  0.061496\nasset3 -0.074779  0.061496  1.000000, ...}
+
+test_components.py:1128: AssertionError
+___________________________ test_optimize_portfolio ___________________________
+
+    def test_optimize_portfolio():
+        """Test portfolio optimization in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Create sample returns data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        returns_data = pd.DataFrame({
+            'asset1': np.random.normal(0.001, 0.01, 100),
+            'asset2': np.random.normal(0.002, 0.015, 100),
+            'asset3': np.random.normal(0.0015, 0.012, 100)
+        }, index=dates)
+    
+        # Optimize portfolio
+        optimal_weights, performance = optimizer.optimize_portfolio(returns_data)
+    
+        # Verify optimization results
+>       assert isinstance(optimal_weights, dict), "Optimal weights should be a dictionary"
+E       AssertionError: Optimal weights should be a dictionary
+E       assert False
+E        +  where False = isinstance(asset1    0.714231\nasset2    0.101108\nasset3    0.184662\ndtype: float64, dict)
+
+test_components.py:1181: AssertionError
+___________________________ test_efficient_frontier ___________________________
+
+    def test_efficient_frontier():
+        """Test efficient frontier calculation in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Create sample returns data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        returns_data = pd.DataFrame({
+            'asset1': np.random.normal(0.001, 0.01, 100),
+            'asset2': np.random.normal(0.002, 0.015, 100),
+            'asset3': np.random.normal(0.0015, 0.012, 100)
+        }, index=dates)
+    
+        # Calculate efficient frontier
+        frontier = optimizer.efficient_frontier(returns_data, num_portfolios=10)
+    
+        # Verify efficient frontier
+>       assert isinstance(frontier, list), "Efficient frontier should be a list"
+E       AssertionError: Efficient frontier should be a list
+E       assert False
+E        +  where False = isinstance(      return  ...        portfolio_type\n0   0.480655  ...                   NaN\n1   0.498088  ...                   Na...             NaN\n10  0.480655  ...    Minimum Volatility\n11  0.480655  ...  Maximum Sharpe Ratio\n\n[12 rows x 5 columns], list)
+
+test_components.py:1207: AssertionError
+________________________ test_calculate_position_sizes ________________________
+
+    def test_calculate_position_sizes():
+        """Test position size calculation in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Define weights
+        weights = {'asset1': 0.3, 'asset2': 0.4, 'asset3': 0.3}
+    
+        # Calculate position sizes
+>       position_sizes = optimizer.calculate_position_sizes(weights, total_capital=100000)
+
+test_components.py:1223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <portfolio_optimization.PortfolioOptimizer object at 0x000001676CBFB530>
+weights = {'asset1': 0.3, 'asset2': 0.4, 'asset3': 0.3}, total_capital = 100000
+signal_strengths = None
+
+    def calculate_position_sizes(self, weights, total_capital, signal_strengths=None):
+        """
+        Calculate position sizes based on weights and signal strengths
+    
+        Parameters:
+        - weights: Series of asset weights
+        - total_capital: Total capital to allocate
+        - signal_strengths: Series of signal strengths (default: None, equal strengths)
+    
+        Returns:
+        - position_sizes: Series of position sizes
+        """
+        # If signal strengths not provided, use equal strengths
+        if signal_strengths is None:
+>           signal_strengths = pd.Series(1.0, index=weights.index)
+E           AttributeError: 'dict' object has no attribute 'index'
+
+portfolio_optimization.py:358: AttributeError
+_________________ test_calculate_risk_adjusted_position_sizes _________________
+
+    def test_calculate_risk_adjusted_position_sizes():
+        """Test risk-adjusted position size calculation in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Define weights and volatilities
+        weights = {'asset1': 0.3, 'asset2': 0.4, 'asset3': 0.3}
+        volatilities = {'asset1': 0.15, 'asset2': 0.2, 'asset3': 0.1}
+    
+        # Calculate risk-adjusted position sizes
+>       position_sizes = optimizer.calculate_risk_adjusted_position_sizes(
+            weights, total_capital=100000, volatilities=volatilities
+        )
+
+test_components.py:1243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <portfolio_optimization.PortfolioOptimizer object at 0x000001676CCD6580>
+weights = {'asset1': 0.3, 'asset2': 0.4, 'asset3': 0.3}, total_capital = 100000
+volatilities = {'asset1': 0.15, 'asset2': 0.2, 'asset3': 0.1}
+target_portfolio_volatility = 0.15, max_position_size = None
+
+    def calculate_risk_adjusted_position_sizes(self, weights, total_capital, volatilities,
+                                              target_portfolio_volatility=0.15, max_position_size=None):
+        """
+        Calculate risk-adjusted position sizes
+    
+        Parameters:
+        - weights: Series of asset weights
+        - total_capital: Total capital to allocate
+        - volatilities: Series of asset volatilities
+        - target_portfolio_volatility: Target portfolio volatility (default: 0.15 or 15%)
+        - max_position_size: Maximum position size as percentage of total capital (default: None)
+    
+        Returns:
+        - position_sizes: Series of position sizes
+        """
+        # Calculate risk contribution of each asset
+>       risk_contributions = weights * volatilities
+E       TypeError: unsupported operand type(s) for *: 'dict' and 'dict'
+
+portfolio_optimization.py:390: TypeError
+___________________ test_calculate_equal_risk_contribution ____________________
+
+    def test_calculate_equal_risk_contribution():
+        """Test equal risk contribution calculation in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Create sample returns data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        returns_data = pd.DataFrame({
+            'asset1': np.random.normal(0.001, 0.01, 100),
+            'asset2': np.random.normal(0.002, 0.015, 100),
+            'asset3': np.random.normal(0.0015, 0.012, 100)
+        }, index=dates)
+    
+        # Calculate equal risk contribution
+>       weights, position_sizes = optimizer.calculate_equal_risk_contribution(returns_data, total_capital=100000)
+E       ValueError: too many values to unpack (expected 2)
+
+test_components.py:1267: ValueError
+____________________ test_implement_risk_management_rules _____________________
+
+    def test_implement_risk_management_rules():
+        """Test risk management rules implementation in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Define position sizes
+        position_sizes = {'asset1': 30000, 'asset2': 40000, 'asset3': 30000}
+    
+        # Implement risk management rules
+>       adjusted_sizes = optimizer.implement_risk_management_rules(
+            position_sizes, total_capital=100000, max_drawdown=0.2, max_position_pct=0.5
+        )
+E       TypeError: PortfolioOptimizer.implement_risk_management_rules() got an unexpected keyword argument 'max_position_pct'
+
+test_components.py:1286: TypeError
+________________ test_optimize_portfolio_with_risk_constraints ________________
+
+    def test_optimize_portfolio_with_risk_constraints():
+        """Test portfolio optimization with risk constraints in PortfolioOptimizer"""
+        optimizer = PortfolioOptimizer()
+    
+        # Create sample returns data
+        dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+        returns_data = pd.DataFrame({
+            'asset1': np.random.normal(0.001, 0.01, 100),
+            'asset2': np.random.normal(0.002, 0.015, 100),
+            'asset3': np.random.normal(0.0015, 0.012, 100)
+        }, index=dates)
+    
+        # Optimize portfolio with risk constraints
+        optimal_weights, performance = optimizer.optimize_portfolio_with_risk_constraints(
+            returns_data, max_var=0.05, max_cvar=0.07
+        )
+    
+        # Verify optimization results
+>       assert isinstance(optimal_weights, dict), "Optimal weights should be a dictionary"
+E       AssertionError: Optimal weights should be a dictionary
+E       assert False
+E        +  where False = isinstance(asset1    0.564648\nasset2    0.076079\nasset3    0.359273\ndtype: float64, dict)
+
+test_components.py:1360: AssertionError
+_____________________ test_alert_condition_initialization _____________________
+
+    def test_alert_condition_initialization():
+        """Test initialization of AlertCondition"""
+        alert = AlertCondition(name="Test Alert", description="Test description", severity="high")
+        assert alert.name == "Test Alert", "Name should be set correctly"
+        assert alert.description == "Test description", "Description should be set correctly"
+        assert alert.severity == "high", "Severity should be set correctly"
+>       assert not alert.is_triggered, "Alert should not be triggered initially"
+E       AttributeError: 'AlertCondition' object has no attribute 'is_triggered'. Did you mean: 'last_triggered'?
+
+test_components.py:1381: AttributeError
+________________________ test_alert_condition_trigger _________________________
+
+    def test_alert_condition_trigger():
+        """Test triggering of AlertCondition"""
+        alert = AlertCondition(name="Test Alert", description="Test description")
+    
+        # Trigger alert
+        alert.trigger()
+    
+        # Verify alert state
+>       assert alert.is_triggered, "Alert should be triggered"
+E       AttributeError: 'AlertCondition' object has no attribute 'is_triggered'. Did you mean: 'last_triggered'?
+
+test_components.py:1391: AttributeError
+_________________________ test_alert_condition_reset __________________________
+
+    def test_alert_condition_reset():
+        """Test resetting of AlertCondition"""
+        alert = AlertCondition(name="Test Alert", description="Test description")
+    
+        # Trigger and reset alert
+        alert.trigger()
+        alert.reset()
+    
+        # Verify alert state
+>       assert not alert.is_triggered, "Alert should not be triggered after reset"
+E       AttributeError: 'AlertCondition' object has no attribute 'is_triggered'. Did you mean: 'last_triggered'?
+
+test_components.py:1404: AttributeError
+_________________________ test_price_alert_condition __________________________
+
+    def test_price_alert_condition():
+        """Test PriceAlertCondition functionality"""
+>       alert = PriceAlertCondition(
+            name="Price Alert",
+            description="Test price alert",
+            symbol="AAPL",
+            price_threshold=150.0,
+            condition="above"
+        )
+E       TypeError: PriceAlertCondition.__init__() got an unexpected keyword argument 'price_threshold'
+
+test_components.py:1410: TypeError
+_______________________ test_indicator_alert_condition ________________________
+
+    def test_indicator_alert_condition():
+        """Test IndicatorAlertCondition functionality"""
+>       alert = IndicatorAlertCondition(
+            name="RSI Alert",
+            description="Test RSI alert",
+            symbol="AAPL",
+            indicator="rsi",
+            threshold=70.0,
+            condition="above"
+        )
+E       TypeError: IndicatorAlertCondition.__init__() got an unexpected keyword argument 'condition'
+
+test_components.py:1447: TypeError
+________________________ test_pattern_alert_condition _________________________
+
+    def test_pattern_alert_condition():
+        """Test PatternAlertCondition functionality"""
+>       alert = PatternAlertCondition(
+            name="Pattern Alert",
+            description="Test pattern alert",
+            symbol="AAPL",
+            pattern="head_and_shoulders",
+            confidence_threshold=0.7
+        )
+E       TypeError: PatternAlertCondition.__init__() got an unexpected keyword argument 'confidence_threshold'
+
+test_components.py:1486: TypeError
+_______________________ test_volatility_alert_condition _______________________
+
+    def test_volatility_alert_condition():
+        """Test VolatilityAlertCondition functionality"""
+>       alert = VolatilityAlertCondition(
+            name="Volatility Alert",
+            description="Test volatility alert",
+            symbol="AAPL",
+            volatility_threshold=0.2,
+            condition="above",
+            window=20
+        )
+E       TypeError: VolatilityAlertCondition.__init__() got an unexpected keyword argument 'volatility_threshold'
+
+test_components.py:1513: TypeError
+_____________________ test_perfect_storm_alert_condition ______________________
+
+    def test_perfect_storm_alert_condition():
+        """Test PerfectStormAlertCondition functionality"""
+>       alert = PerfectStormAlertCondition(
+            name="Perfect Storm Alert",
+            description="Test perfect storm alert",
+            symbol="AAPL",
+            required_signals=["rsi_oversold", "macd_crossover", "price_above_sma"],
+            min_signals=2
+        )
+E       TypeError: PerfectStormAlertCondition.__init__() got an unexpected keyword argument 'required_signals'
+
+test_components.py:1552: TypeError
+============================== warnings summary ===============================
+test_components.py::test_calculate_regime_specific_thresholds
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\adaptive_thresholds_enhanced.py:233: FutureWarning:
+  
+  Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:252: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:263: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:264: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:305: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:312: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:319: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:328: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:343: FutureWarning:
+  
+  A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+  The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+  
+  For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+test_components.py::test_preprocess_data_pattern
+  C:\Users\klamo\Perfect_Storm_Dashboard_Enhanced\technical_indicators.py:109: FutureWarning:
+  
+  DataFrame.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+
+test_components.py::test_create_ensemble_models
+  C:\Users\klamo\AppData\Local\Programs\Python\Python313\Lib\site-packages\torch\nn\modules\transformer.py:385: UserWarning:
+  
+  enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED test_components.py::test_anomaly_detection - ValueError: Not all ensem...
+FAILED test_components.py::test_clustering - AttributeError: 'PerfectStormClu...
+FAILED test_components.py::test_pattern_recognizer_initialization - Attribute...
+FAILED test_components.py::test_pattern_recognition - TypeError: MarketPatter...
+FAILED test_components.py::test_correlation_analysis - TypeError: Correlation...
+FAILED test_components.py::test_validate_regime_classification - AssertionErr...
+FAILED test_components.py::test_calculate_regime_specific_thresholds - Assert...
+FAILED test_components.py::test_backtesting_engine_initialization - Attribute...
+FAILED test_components.py::test_run_backtest - ValueError: Input DataFrame mu...
+FAILED test_components.py::test_calculate_performance_metrics - ValueError: I...
+FAILED test_components.py::test_optimize_parameters - AttributeError: Can't g...
+FAILED test_components.py::test_walk_forward_optimization - AttributeError: C...
+FAILED test_components.py::test_monte_carlo_simulation - ValueError: Input Da...
+FAILED test_components.py::test_analyze_market_regimes - TypeError: list indi...
+FAILED test_components.py::test_calculate_correlation_matrix - ValueError: me...
+FAILED test_components.py::test_calculate_rolling_correlations - TypeError: R...
+FAILED test_components.py::test_calculate_feature_importance - AssertionError...
+FAILED test_components.py::test_calculate_signal_weights - AssertionError: Si...
+FAILED test_components.py::test_calculate_weighted_signal - AttributeError: '...
+FAILED test_components.py::test_ml_anomaly_detection_initialization - Asserti...
+FAILED test_components.py::test_train_isolation_forest - AttributeError: 'Mar...
+FAILED test_components.py::test_detect_anomalies - AttributeError: 'MarketAno...
+FAILED test_components.py::test_ml_pattern_recognition_initialization - Attri...
+FAILED test_components.py::test_preprocess_data_pattern - ValueError: too man...
+FAILED test_components.py::test_recognize_patterns - AttributeError: 'MarketP...
+FAILED test_components.py::test_calculate_portfolio_metrics - AssertionError:...
+FAILED test_components.py::test_optimize_portfolio - AssertionError: Optimal ...
+FAILED test_components.py::test_efficient_frontier - AssertionError: Efficien...
+FAILED test_components.py::test_calculate_position_sizes - AttributeError: 'd...
+FAILED test_components.py::test_calculate_risk_adjusted_position_sizes - Type...
+FAILED test_components.py::test_calculate_equal_risk_contribution - ValueErro...
+FAILED test_components.py::test_implement_risk_management_rules - TypeError: ...
+FAILED test_components.py::test_optimize_portfolio_with_risk_constraints - As...
+FAILED test_components.py::test_alert_condition_initialization - AttributeErr...
+FAILED test_components.py::test_alert_condition_trigger - AttributeError: 'Al...
+FAILED test_components.py::test_alert_condition_reset - AttributeError: 'Aler...
+FAILED test_components.py::test_price_alert_condition - TypeError: PriceAlert...
+FAILED test_components.py::test_indicator_alert_condition - TypeError: Indica...
+FAILED test_components.py::test_pattern_alert_condition - TypeError: PatternA...
+FAILED test_components.py::test_volatility_alert_condition - TypeError: Volat...
+FAILED test_components.py::test_perfect_storm_alert_condition - TypeError: Pe...
+=========== 41 failed, 30 passed, 4 skipped, 11 warnings in 16.91s ============
