@@ -33,7 +33,7 @@ import os
 import pickle
 import json
 import time
-from indicator_calculations import PerfectStormIndicators 
+from technical_indicators import TechnicalIndicators 
 try:
     import hdbscan
     HDBSCAN_AVAILABLE = True
@@ -63,13 +63,14 @@ class MarketClusteringDataset(Dataset):
 class Autoencoder(nn.Module):
     """Autoencoder model for dimensionality reduction and anomaly detection"""
     
-    def __init__(self, input_size, encoding_size=10):
+    def __init__(self, input_size, encoding_size=10, device='cpu'):
         """
         Initialize the autoencoder model
         
         Parameters:
         - input_size: Number of input features
         - encoding_size: Size of the encoded representation (default: 10)
+        - device: Device to run the model on (default: 'cpu')
         """
         super(Autoencoder, self).__init__()
         
@@ -92,6 +93,7 @@ class Autoencoder(nn.Module):
             nn.Linear(128, input_size),
             nn.Sigmoid()  # Assuming features are normalized to [0, 1]
         )
+        self.to(device)
     
     def forward(self, x):
         """
@@ -115,7 +117,7 @@ class Autoencoder(nn.Module):
 class TemporalAutoencoder(nn.Module):
     """Temporal autoencoder model for time-dependent clustering"""
     
-    def __init__(self, input_size, sequence_length, encoding_size=10):
+    def __init__(self, input_size, sequence_length, encoding_size=10, device='cpu'):
         """
         Initialize the temporal autoencoder model
         
@@ -123,6 +125,7 @@ class TemporalAutoencoder(nn.Module):
         - input_size: Number of input features
         - sequence_length: Length of input sequence
         - encoding_size: Size of the encoded representation (default: 10)
+        - device: Device to run the model on (default: 'cpu')
         """
         super(TemporalAutoencoder, self).__init__()
         
@@ -147,6 +150,7 @@ class TemporalAutoencoder(nn.Module):
         )
         
         self.decoder_fc = nn.Linear(64, input_size)
+        self.to(device)
     
     def forward(self, x):
         """
@@ -207,6 +211,10 @@ class PerfectStormClustering:
         self.use_temporal = use_temporal
         self.sequence_length = sequence_length
         self.use_ensemble = use_ensemble
+        
+        # Determine device for GPU support
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device for PerfectStormClustering: {self.device}")
         
         # Create model directory if it doesn't exist
         os.makedirs(model_path, exist_ok=True)
@@ -432,9 +440,9 @@ class PerfectStormClustering:
         - autoencoder: PyTorch autoencoder model
         """
         if self.use_temporal:
-            return TemporalAutoencoder(input_size, self.sequence_length, self.encoding_size)
+            return TemporalAutoencoder(input_size, self.sequence_length, self.encoding_size, device=self.device)
         else:
-            return Autoencoder(input_size, self.encoding_size)
+            return Autoencoder(input_size, self.encoding_size, device=self.device)
     
     def _create_clustering_model(self):
         """
@@ -444,15 +452,15 @@ class PerfectStormClustering:
         - clustering_model: Clustering model
         """
         if self.clustering_method == 'kmeans':
-            return KMeans(n_clusters=self.n_clusters, random_state=42)
+            return KMeans(n_clusters=self.n_clusters, random_state=42, n_jobs=-1)
         elif self.clustering_method == 'dbscan':
-            return DBSCAN(eps=0.5, min_samples=5)
+            return DBSCAN(eps=0.5, min_samples=5, n_jobs=-1)
         elif self.clustering_method == 'hdbscan':
             if HDBSCAN_AVAILABLE:
                 return hdbscan.HDBSCAN(min_cluster_size=5, prediction_data=True)
             else:
                 print("HDBSCAN not available, falling back to DBSCAN")
-                return DBSCAN(eps=0.5, min_samples=5)
+                return DBSCAN(eps=0.5, min_samples=5, n_jobs=-1)
         elif self.clustering_method == 'gmm':
             return GaussianMixture(n_components=self.n_clusters, random_state=42)
         elif self.clustering_method == 'hierarchical':

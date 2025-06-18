@@ -63,6 +63,10 @@ class MarketDataRetriever:
             start_date = end_date - pd.Timedelta(days=365)
         elif period == '2y':
             start_date = end_date - pd.Timedelta(days=730)
+        elif period == '5y':
+            start_date = end_date - pd.Timedelta(days=1825)
+        elif period == '10y':
+            start_date = end_date - pd.Timedelta(days=3650)
         else:
             start_date = end_date - pd.Timedelta(days=30)
         df = df[(df.index >= start_date) & (df.index <= end_date)]
@@ -120,6 +124,10 @@ class MarketDataRetriever:
             start_date = end_date - pd.Timedelta(days=365)
         elif period == '2y':
             start_date = end_date - pd.Timedelta(days=730)
+        elif period == '5y':
+            start_date = end_date - pd.Timedelta(days=1825)
+        elif period == '10y':
+            start_date = end_date - pd.Timedelta(days=3650)
         else:
             start_date = end_date - pd.Timedelta(days=30)
         df = df[(df.index >= start_date) & (df.index <= end_date)]

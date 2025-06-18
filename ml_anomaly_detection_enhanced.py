@@ -58,7 +58,7 @@ class MarketAnomalyDataset(Dataset):
 class VariationalAutoencoder(nn.Module):
     """Enhanced Variational Autoencoder model for anomaly detection"""
     
-    def __init__(self, input_size, latent_size=14, hidden_size=128):
+    def __init__(self, input_size, latent_size=14, hidden_size=128, device='cpu'):
         """
         Initialize the VAE model
         
@@ -66,6 +66,7 @@ class VariationalAutoencoder(nn.Module):
         - input_size: Number of input features
         - latent_size: Size of the latent space (default: 14)
         - hidden_size: Size of hidden layers (default: 128)
+        - device: Device to run the model on (default: 'cpu')
         """
         super(VariationalAutoencoder, self).__init__()
         
@@ -94,6 +95,8 @@ class VariationalAutoencoder(nn.Module):
             nn.Linear(hidden_size, input_size),
             nn.Sigmoid()  # Assuming features are normalized to [0, 1]
         )
+        # Move model to the specified device
+        self.to(device)
     
     def encode(self, x):
         """
@@ -178,7 +181,7 @@ class VariationalAutoencoder(nn.Module):
 class TemporalVariationalAutoencoder(nn.Module):
     """Temporal Variational Autoencoder model for time series anomaly detection"""
     
-    def __init__(self, input_size, sequence_length, latent_size=14, hidden_size=64):
+    def __init__(self, input_size, sequence_length, latent_size=14, hidden_size=64, device='cpu'):
         """
         Initialize the Temporal VAE model
         
@@ -187,6 +190,7 @@ class TemporalVariationalAutoencoder(nn.Module):
         - sequence_length: Length of input sequence
         - latent_size: Size of the latent space (default: 14)
         - hidden_size: Size of hidden layers (default: 64)
+        - device: Device to run the model on (default: 'cpu')
         """
         super(TemporalVariationalAutoencoder, self).__init__()
         
@@ -430,13 +434,13 @@ class MarketAnomalyDetection:
         
         return np.array(temporal_features)
     
-    def train_vae(self, features, device='cpu', symbol=None, period=None, interval=None):
+    def train_vae(self, features, device=None, symbol=None, period=None, interval=None):
         """
         Train Variational Autoencoder for anomaly detection
         
         Parameters:
         - features: Preprocessed features
-        - device: Device to use for training ('cpu' or 'cuda', default: 'cpu')
+        - device: Device to use for training ('cpu' or 'cuda', default: None, auto-detects GPU if available)
         - symbol: Symbol to include in filenames (default: None)
         - period: Time period to include in filenames (default: None)
         - interval: Time interval to include in filenames (default: None)
@@ -444,6 +448,10 @@ class MarketAnomalyDetection:
         Returns:
         - model: Trained VAE model
         """
+        # Auto-detect GPU if device is not specified
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            print(f"Device auto-detected for VAE training: {device}")
         from dashboard_utils import get_standardized_model_filename
         
         # Create standardized filename
@@ -476,8 +484,7 @@ class MarketAnomalyDetection:
         
         # Initialize model
         input_size = features.shape[1]
-        model = VariationalAutoencoder(input_size, self.latent_size, self.hidden_size)
-        model.to(device)
+        model = VariationalAutoencoder(input_size, self.latent_size, self.hidden_size, device=device)
         
         # Define loss function and optimizer
         optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
@@ -514,13 +521,13 @@ class MarketAnomalyDetection:
         
         return model
 
-    def train_temporal_vae(self, features, device='cpu', symbol=None, period=None, interval=None):
+    def train_temporal_vae(self, features, device=None, symbol=None, period=None, interval=None):
         """
         Train Temporal Variational Autoencoder for time series anomaly detection
         
         Parameters:
         - features: Preprocessed features
-        - device: Device to use for training ('cpu' or 'cuda', default: 'cpu')
+        - device: Device to use for training ('cpu' or 'cuda', default: None, auto-detects GPU if available)
         - symbol: Symbol to include in filenames (default: None)
         - period: Time period to include in filenames (default: None)
         - interval: Time interval to include in filenames (default: None)
@@ -528,6 +535,10 @@ class MarketAnomalyDetection:
         Returns:
         - model: Trained Temporal VAE model
         """
+        # Auto-detect GPU if device is not specified
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            print(f"Device auto-detected for Temporal VAE training: {device}")
         from dashboard_utils import get_standardized_model_filename
         
         # Create standardized filename
@@ -1019,7 +1030,7 @@ class MarketAnomalyDetection:
         
         return ensemble_scores
     
-    def detect_anomalies(self, df, feature_cols, method=None, device='cpu'):
+    def detect_anomalies(self, df, feature_cols, method=None, device=None):
         """
         Detect anomalies in market data
         
@@ -1027,11 +1038,15 @@ class MarketAnomalyDetection:
         - df: DataFrame with market data
         - feature_cols: List of feature column names
         - method: Method for anomaly detection (default: None, use self.anomaly_method)
-        - device: Device to use for inference ('cpu' or 'cuda', default: 'cpu')
+        - device: Device to use for inference ('cpu' or 'cuda', default: None, auto-detects GPU if available)
         
         Returns:
         - anomaly_scores: Anomaly scores
         """
+        # Auto-detect GPU if device is not specified
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            print(f"Device auto-detected for anomaly detection: {device}")
         if method is None:
             method = self.anomaly_method
         

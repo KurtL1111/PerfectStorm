@@ -59,7 +59,7 @@ app.layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     dbc.Label("Stock Symbol:"),
-                    dbc.Input(id='symbol-input', type='text', value='SPY', placeholder="e.g., TSLA, AAPL, BTC/USD"),
+                    dbc.Input(id='symbol-input', type='text', value='BTC/USD', placeholder="e.g., TSLA, AAPL, BTC/USD"),
                 ], md=3), # Use md for medium screen column width
 
                 dbc.Col([
@@ -75,7 +75,7 @@ app.layout = dbc.Container([
                             {'label': '5 Years', 'value': '5y'},
                             {'label': '10 Years', 'value': '10y'},
                             {'label': 'All-Time', 'value': 'max'},
-                        ], value='10y'
+                        ], value='5y'
                     ),  # Added 10y and All-Time (max) options
                 ], md=3),
 
@@ -87,7 +87,7 @@ app.layout = dbc.Container([
                             {'label': '1 Day', 'value': '1d'}, {'label': '1 Hour', 'value': '1h'},
                             {'label': '30 Minutes', 'value': '30m'}, {'label': '15 Minutes', 'value': '15m'},
                             {'label': '5 Minutes', 'value': '5m'}, {'label': '1 Minute', 'value': '1m'},
-                        ], value='1d'
+                        ], value='1m'
                     ),
                 ], md=3),
 

@@ -135,7 +135,7 @@ class LSTMModel(nn.Module):
 class CNNModel(nn.Module):
     """CNN model for pattern recognition"""
     
-    def __init__(self, input_size, sequence_length, num_filters, output_size, layer_norm=True):
+    def __init__(self, input_size, sequence_length, num_filters, output_size, layer_norm=True, device='cpu'):
         """
         Initialize the CNN model
         
@@ -144,6 +144,8 @@ class CNNModel(nn.Module):
         - sequence_length: Length of input sequence
         - num_filters: Number of convolutional filters
         - output_size: Number of output classes
+        - layer_norm: Boolean to enable layer normalization (default: True)
+        - device: Device to run the model on (default: 'cpu')
         """
         super(CNNModel, self).__init__()
         
@@ -164,7 +166,7 @@ class CNNModel(nn.Module):
         self.sigmoid = nn.Sigmoid()
         # Dropout
         self.dropout = nn.Dropout(0.3)
-    
+        self.to(device)    
     def forward(self, x):
         """
         Forward pass
@@ -469,9 +471,9 @@ class MarketPatternRecognition:
         - num_epochs: Number of training epochs (default: 100)
         - model_path: Path to save/load models (default: 'models')
         - model_type: Type of model to use ('lstm', 'cnn', 'transformer', default: 'lstm')
-        - use_ensemble: Whether to use ensemble methods (default: False)
-        - use_attention: Whether to use attention mechanism (default: False)
-        - use_transfer_learning: Whether to use transfer learning (default: False)
+        - use_ensemble: Whether to use ensemble methods (default: True)
+        - use_attention: Whether to use attention mechanism (default: True)
+        - use_transfer_learning: Whether to use transfer learning (default: True)
         """
         self.sequence_length = sequence_length
         self.hidden_size = hidden_size
@@ -501,6 +503,10 @@ class MarketPatternRecognition:
         # Initialize ONNX models
         self.onnx_model_path = None
         self.onnx_session = None
+        
+        # Determine device for GPU support
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self.device}")
     
     def preprocess_data(self, df, feature_cols, target_col=None, train_size=0.8, add_features=True):
         """
@@ -584,9 +590,10 @@ class MarketPatternRecognition:
             # Create datasets
             train_dataset = MarketPatternDataset(X_train_tensor, y_train_tensor)
             test_dataset = MarketPatternDataset(X_test_tensor, y_test_tensor)
-            # Create dataloaders
-            train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=False)  # No shuffle for time series
-            test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+            # Create dataloaders with multi-core processing, adjust workers based on device
+            num_workers = min(os.cpu_count(), 8) if os.cpu_count() and self.device.type == "cuda" else min(os.cpu_count(), 4) if os.cpu_count() else 0
+            train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=False, num_workers=num_workers)  # No shuffle for time series
+            test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=num_workers)
             # Return processed data
             return {
                 'X': X,
@@ -611,8 +618,9 @@ class MarketPatternRecognition:
             # Create dataset
             dataset = MarketPatternDataset(X_tensor)
             
-            # Create dataloader
-            dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+            # Create dataloader with multi-core processing, adjust workers based on device
+            num_workers = min(os.cpu_count(), 8) if os.cpu_count() and self.device.type == "cuda" else min(os.cpu_count(), 4) if os.cpu_count() else 0
+            dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=num_workers)
             
             # Return processed data
             return {
@@ -686,14 +694,14 @@ class MarketPatternRecognition:
             print(f"Model {i} architecture: {model}")
         return models
     
-    def train_model(self, train_loader, test_loader=None, device='cpu', symbol=None, period=None, interval=None):
+    def train_model(self, train_loader, test_loader=None, device=None, symbol=None, period=None, interval=None):
         """
         Train model for pattern recognition
         
         Parameters:
         - train_loader: DataLoader for training data
         - test_loader: DataLoader for test data (optional)
-        - device: Device to use for training ('cpu' or 'cuda', default: 'cpu')
+        - device: Device to use for training ('cpu' or 'cuda', default: None, use self.device)
         - symbol: Symbol to include in filename (default: None)
         - period: Time period to include in filename (default: None)
         - interval: Time interval to include in filename (default: None)
@@ -701,6 +709,11 @@ class MarketPatternRecognition:
         Returns:
         - model: Trained model
         """
+        # Use class device if not specified
+        if device is None:
+            device = self.device
+        print(f"Training on device: {device}")
+
         # Get input size from first batch
         for batch in train_loader:
             if isinstance(batch, tuple):
@@ -801,6 +814,9 @@ class MarketPatternRecognition:
             model.eval()
             return model
             
+        # Move model to device
+        model.to(device)
+            
         # Compute class weights for imbalanced data
         y_all = []
         for batch in train_loader:
@@ -817,57 +833,7 @@ class MarketPatternRecognition:
             # Flatten output and target to 1D
             output_flat = output.view(-1)
             target_flat = target.view(-1)
-            # Compute weight as 1D tensor
-            weight = class_weights[target_flat.long()]
-            return nn.BCELoss(weight=weight)(output_flat, target_flat)
-        criterion = weighted_bce_loss
-        optimizer = optim.AdamW(model.parameters(), lr=self.learning_rate, weight_decay=1e-4)
-        # Learning rate scheduler
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
-        # Early stopping
-        best_loss = float('inf')
-        patience = 20
-        patience_counter = 0
-        model.train()
-        for epoch in range(self.num_epochs):
-            total_loss = 0
-            for batch in train_loader:
-                features, labels = batch
-                features = features.to(device)
-                labels = labels.to(device)
-                outputs = model(features)
-                if outputs.shape != labels.shape:
-                    if len(outputs.shape) == 3 and len(labels.shape) == 2:
-                        outputs = outputs[:, -1, :]
-                try:
-                    loss = criterion(outputs, labels)
-                except RuntimeError as e:
-                    if outputs.shape != labels.shape:
-                        outputs = outputs.view(labels.shape)
-                        loss = criterion(outputs, labels)
-                    else:
-                        raise
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                total_loss += loss.item()
-            avg_loss = total_loss / len(train_loader)
-            scheduler.step(avg_loss)
-            # Early stopping
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                patience_counter = 0
-            else:
-                patience_counter += 1
-            if patience_counter > patience:
-                print(f"Early stopping at epoch {epoch+1}")
-                break
-            if (epoch + 1) % 10 == 0:
-                if test_loader is not None:
-                    accuracy, precision, recall, f1 = self.evaluate_model(model, test_loader, device)
-        torch.save(model.state_dict(), model_pth)
-        print(f"Model saved to {model_pth}")
-        return model
+            # Compute weight as
     
     def evaluate_model(self, model, test_loader, device='cpu'):
         """
@@ -1151,8 +1117,9 @@ class MarketPatternRecognition:
                 raise ValueError("ONNX model path not specified. Call export_to_onnx first.")
             onnx_model_path = self.onnx_model_path
         
-        # Load ONNX model
-        session = ort.InferenceSession(onnx_model_path)
+        # Load ONNX model with GPU support if available
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if torch.cuda.is_available() else ['CPUExecutionProvider']
+        session = ort.InferenceSession(onnx_model_path, providers=providers)
         
         # Store ONNX session
         self.onnx_session = session

@@ -65,14 +65,15 @@ class MarketRegimeDataset(Dataset):
 class MarketRegimeClassifier(nn.Module):
     """Neural network for market regime classification"""
     
-    def __init__(self, input_size, hidden_size=64, num_classes=4):
+    def __init__(self, input_size, hidden_size=64, num_classes=4, device='cpu'):
         """
         Initialize the market regime classifier model
         
         Parameters:
         - input_size: Number of input features
         - hidden_size: Size of hidden layers (default: 64)
-        - num_classes: Number of market regime classes (default: 3)
+        - num_classes: Number of market regime classes (default: 4)
+        - device: Device to run the model on (default: 'cpu')
         """
         super(MarketRegimeClassifier, self).__init__()
         
@@ -85,6 +86,7 @@ class MarketRegimeClassifier(nn.Module):
             nn.Dropout(0.3),
             nn.Linear(hidden_size // 2, num_classes)
         )
+        self.to(device)
     
     def forward(self, x):
         """
@@ -144,6 +146,10 @@ class MarketRegimeDetection:
             2: 'ranging',
             3: 'volatile'
         }
+        
+        # Determine device for GPU support
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device for MarketRegimeDetection: {self.device}")
         
         # Initialize strategy parameters for each regime
         self.strategy_parameters = {
@@ -235,32 +241,43 @@ class MarketRegimeDetection:
         # Calculate returns
         df_features['returns'] = df_features[price_col].pct_change()
         df_features['log_returns'] = np.log(df_features[price_col] / df_features[price_col].shift(1))
+        df_features['log_returns'] = df_features['log_returns'].replace([np.inf, -np.inf], np.nan)
         
         # Calculate volatility features
         df_features['volatility'] = df_features['returns'].rolling(window=self.volatility_window).std() * np.sqrt(252)  # Annualized
         df_features['volatility_change'] = df_features['volatility'].pct_change(self.volatility_window)
+        df_features['volatility_change'] = df_features['volatility_change'].replace([np.inf, -np.inf], np.nan)
         df_features['high_low_range'] = (df_features['high'] - df_features['low']) / df_features[price_col]
+        df_features['high_low_range'] = df_features['high_low_range'].replace([np.inf, -np.inf], np.nan)
         
         # Calculate trend features
         df_features['trend'] = df_features[price_col].pct_change(self.trend_window)
+        df_features['trend'] = df_features['trend'].replace([np.inf, -np.inf], np.nan)
         df_features['trend_strength'] = abs(df_features['trend'])
         df_features['sma_20'] = df_features[price_col].rolling(window=20).mean()
         df_features['sma_50'] = df_features[price_col].rolling(window=50).mean()
         df_features['sma_ratio'] = df_features['sma_20'] / df_features['sma_50']
+        df_features['sma_ratio'] = df_features['sma_ratio'].replace([np.inf, -np.inf], np.nan)
         
         # Calculate momentum features
         df_features['momentum'] = df_features['returns'].rolling(window=self.volatility_window).mean()
         df_features['momentum_change'] = df_features['momentum'].pct_change(self.volatility_window)
+        df_features['momentum_change'] = df_features['momentum_change'].replace([np.inf, -np.inf], np.nan)
         
         # Calculate mean reversion features
-        df_features['mean_reversion'] = (df_features[price_col] - df_features[price_col].rolling(window=self.volatility_window).mean()) / df_features[price_col].rolling(window=self.volatility_window).std()
+        std_dev = df_features[price_col].rolling(window=self.volatility_window).std()
+        df_features['mean_reversion'] = (df_features[price_col] - df_features[price_col].rolling(window=self.volatility_window).mean()) / std_dev
+        df_features['mean_reversion'] = df_features['mean_reversion'].where(std_dev > 1e-10).replace([np.inf, -np.inf], np.nan)
         
         # Calculate volume features if volume column exists
         if volume_col in df_features.columns:
             df_features['volume_change'] = df_features[volume_col].pct_change()
+            df_features['volume_change'] = df_features['volume_change'].replace([np.inf, -np.inf], np.nan)
             df_features['volume_ma'] = df_features[volume_col].rolling(window=self.volatility_window).mean()
             df_features['relative_volume'] = df_features[volume_col] / df_features['volume_ma']
+            df_features['relative_volume'] = df_features['relative_volume'].replace([np.inf, -np.inf], np.nan)
             df_features['volume_trend'] = df_features[volume_col].pct_change(self.trend_window)
+            df_features['volume_trend'] = df_features['volume_trend'].replace([np.inf, -np.inf], np.nan)
         
         # Calculate autocorrelation features
         df_features['autocorr_1'] = df_features['returns'].rolling(window=self.volatility_window).apply(lambda x: x.autocorr(1), raw=False)
@@ -273,8 +290,8 @@ class MarketRegimeDetection:
         # Calculate RSI
         df_features['rsi'] = self.calculate_rsi(df_features[price_col])
         
-        # Drop NaN values
-        df_features = df_features.dropna()
+        # Fill NaN values with reasonable defaults or drop them
+        df_features = df_features.fillna(0).replace([np.inf, -np.inf], 0)
         
         return df_features
     
@@ -335,6 +352,10 @@ class MarketRegimeDetection:
         
         # Prepare data for clustering
         X = df_features[feature_cols].values
+        
+        # Clean data before scaling: replace infinities and very large values
+        X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
+        X = np.clip(X, -1e10, 1e10)
         
         # Standardize features
         scaler = StandardScaler()
@@ -539,24 +560,27 @@ class MarketRegimeDetection:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
+        # Use the class-level device
+        device = self.device
+        
         # Convert to PyTorch tensors
-        X_tensor = torch.FloatTensor(X_scaled)
+        X_tensor = torch.FloatTensor(X_scaled).to(device)
         
         # If target labels are provided, use supervised learning
         if df_target is not None:
             y = df_target.values
-            y_tensor = torch.LongTensor(y)
+            y_tensor = torch.LongTensor(y).to(device)
             
             # Create dataset
             dataset = MarketRegimeDataset(X_tensor, y_tensor)
             
-            # Create dataloader
+            # Create dataloader with multi-core processing
             batch_size = min(32, len(dataset))
-            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4 if device.type == "cpu" else 0)
             
             # Create model
             input_size = X_tensor.shape[1]
-            model = MarketRegimeClassifier(input_size, hidden_size=64, num_classes=n_regimes)
+            model = MarketRegimeClassifier(input_size, hidden_size=64, num_classes=n_regimes, device=device)
             
             # Define loss function and optimizer
             criterion = nn.CrossEntropyLoss()
@@ -566,6 +590,9 @@ class MarketRegimeDetection:
             num_epochs = 100
             for epoch in range(num_epochs):
                 for batch_X, batch_y in dataloader:
+                    # Ensure data is on the correct device
+                    batch_X = batch_X.to(device)
+                    batch_y = batch_y.to(device)
                     # Forward pass
                     outputs = model(batch_X)
                     loss = criterion(outputs, batch_y)
@@ -580,7 +607,7 @@ class MarketRegimeDetection:
             with torch.no_grad():
                 outputs = model(X_tensor)
                 _, predicted = torch.max(outputs.data, 1)
-                labels = predicted.numpy()
+                labels = predicted.cpu().numpy()
             
             # Store model
             self.regime_models['nn'] = model
