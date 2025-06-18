@@ -163,6 +163,52 @@ app.layout = dbc.Container([
         ]),
     ], className="mb-4"),
 
+    dbc.Card([ # Model Training Controls Card
+        dbc.CardHeader("Model Training Controls"),
+        dbc.CardBody([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Symbol:"),
+                    dbc.Input(id='train-symbol-input', type='text', value='BTC/USD', placeholder="e.g., TSLA, AAPL, BTC/USD"),
+                ], md=4),
+                dbc.Col([
+                    dbc.Label("Training Period:"),
+                    dcc.Dropdown(
+                        id='train-period-dropdown',
+                        options=[
+                            {'label': '1 Year', 'value': '1y'},
+                            {'label': '2 Years', 'value': '2y'},
+                            {'label': '5 Years', 'value': '5y'},
+                            {'label': '10 Years', 'value': '10y'}
+                        ],
+                        value='1y'
+                    ),
+                ], md=4),
+                dbc.Col([
+                    dbc.Label("Training Interval:"),
+                    dcc.Dropdown(
+                        id='train-interval-dropdown',
+                        options=[
+                            {'label': '1 Day', 'value': '1d'},
+                            {'label': '1 Hour', 'value': '1h'}
+                        ],
+                        value='1d'
+                    ),
+                ], md=4),
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Button('Train All Models', id='train-models-button', n_clicks=0, color="warning", className="w-100 mt-4")
+                ], md=12)
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    html.Div(id='train-models-output', className="mt-2 text-muted small")
+                ], md=12)
+            ]),
+        ]),
+    ], className="mb-4"),
+
     # Initially hidden Portfolio Report Container
     dbc.Collapse(
         html.Div(

@@ -39,6 +39,7 @@ try:
     HDBSCAN_AVAILABLE = True
 except ImportError:
     HDBSCAN_AVAILABLE = False
+from dashboard_utils import log_with_timestamp
 
 class MarketClusteringDataset(Dataset):
     """Dataset class for market clustering"""
@@ -214,7 +215,7 @@ class PerfectStormClustering:
         
         # Determine device for GPU support
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Using device for PerfectStormClustering: {self.device}")
+        log_with_timestamp(f"Using device for PerfectStormClustering: {self.device}", log_level="INFO")
         
         # Create model directory if it doesn't exist
         os.makedirs(model_path, exist_ok=True)
@@ -322,7 +323,7 @@ class PerfectStormClustering:
         Returns:
         - X: Feature matrix
         """
-        print("Normal preparation of clustering data")
+        log_with_timestamp("Normal preparation of clustering data", log_level="DEBUG")
         # Make a copy to avoid modifying the original DataFrame
         df_copy = df.copy()
         # Add technical features if requested
@@ -398,7 +399,7 @@ class PerfectStormClustering:
             X = StandardScaler().fit_transform(X)
             return X, df_copy.index, feature_columns
         else:
-            print("WARNING: Empty dataframe after preparation")
+            log_with_timestamp("WARNING: Empty dataframe after preparation", log_level="WARNING")
             # Return a dummy array with at least one sample to avoid StandardScaler error
             dummy = np.zeros((1, X.shape[1] if X.ndim>1 else 1))
             return dummy, df_copy.index, feature_columns
@@ -415,7 +416,7 @@ class PerfectStormClustering:
         Returns:
         - X: Feature sequences
         """
-        print("Preparing temporal data")
+        log_with_timestamp("Preparing temporal data", log_level="DEBUG")
         # Prepare regular data
         X, indices, feature_columns = self._prepare_data(df, feature_columns, add_technical_features)
         
@@ -459,7 +460,7 @@ class PerfectStormClustering:
             if HDBSCAN_AVAILABLE:
                 return hdbscan.HDBSCAN(min_cluster_size=5, prediction_data=True)
             else:
-                print("HDBSCAN not available, falling back to DBSCAN")
+                log_with_timestamp("HDBSCAN not available, falling back to DBSCAN", log_level="WARNING")
                 return DBSCAN(eps=0.5, min_samples=5, n_jobs=-1)
         elif self.clustering_method == 'gmm':
             return GaussianMixture(n_components=self.n_clusters, random_state=42)
@@ -471,7 +472,7 @@ class PerfectStormClustering:
         else:
             raise ValueError(f"Unsupported clustering method: {self.clustering_method}")
     
-    def train(self, df, feature_columns=None, add_technical_features=True, validation_split=0.2, path=None, symbol=None, X_scaled_for_encoding=None):
+    def train(self, df, feature_columns=None, add_technical_features=True, validation_split=0.2, path=None, symbol: str = None, period: str = None, interval: str = None, X_scaled_for_encoding=None):
         """
         Train the clustering model using the provided market data.
         
@@ -481,6 +482,9 @@ class PerfectStormClustering:
         - add_technical_features (bool, optional): Whether to add engineered technical indicators as features (default: True)
         - validation_split (float, optional): Fraction of data to reserve for validation (between 0 and 1, default: 0.2)
         - path (str, optional): Path to save the trained model and scaler. If None, uses the default model path (default: None)
+        - symbol (str, optional): Stock symbol for logging and model naming.
+        - period (str, optional): Data period for logging and model naming.
+        - interval (str, optional): Data interval for logging and model naming.
         
         Returns:
         - Dict: Dictionary containing training history with 'train_loss' and 'val_loss' lists
@@ -490,14 +494,14 @@ class PerfectStormClustering:
             path = self.model_path
 
         # Add symbol to filenames if provided
-        symbol_str = f"_{symbol}" if symbol else ""
+        symbol_str = f"_{symbol}" if symbol else "" # Retained for file naming
 
         # Check if model exists and load if available
         config_file = os.path.join(path, f'config_clustering{symbol_str}.json')
         if os.path.exists(config_file):
-            self.load_model(path=path, symbol=symbol)
+            self.load_model(path=path, symbol=symbol) # Pass symbol here
             if self.autoencoder is not None and self.clustering_model is not None:
-                print("Model already trained and loaded. Skipping retraining.")
+                log_with_timestamp(f"Clustering model for {symbol_str} already trained and loaded. Skipping retraining.", log_level="INFO")
                 return {'train_loss': [], 'val_loss': []}
         
         # Prepare or use pre-scaled data
@@ -578,8 +582,9 @@ class PerfectStormClustering:
             history['train_loss'].append(train_loss)
             history['val_loss'].append(val_loss)
             
-            # Print epoch summary
-            #print(f"Epoch [{epoch+1}/{self.num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+            # Log progress
+            if (epoch + 1) % max(1, self.num_epochs // 10) == 0 or epoch == self.num_epochs - 1:
+                log_with_timestamp(f"Clustering Autoencoder Training progress for {symbol}: {(epoch + 1) * 100 / self.num_epochs:.0f}% completed. Epoch {epoch+1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}", log_level="INFO")
         
         # Save the trained autoencoder model
         model_file = os.path.join(self.model_path, 'autoencoder_clustering.pth')
@@ -608,10 +613,10 @@ class PerfectStormClustering:
         if self.clustering_method == 'hdbscan' and HDBSCAN_AVAILABLE:
             self.labels = self.clustering_model.fit_predict(encoded_features)
         else:
-            print("Debug: About to call clustering algorithm")
+            log_with_timestamp("Debug: About to call clustering algorithm", log_level="DEBUG")
             self.clustering_model.fit(encoded_features)
             self.labels = self.clustering_model.labels_
-            print(f"Debug: Clustering result type: {type(self.labels)}, length if tuple: {len(self.labels) if isinstance(self.labels, tuple) else 'not a tuple'}")
+            log_with_timestamp(f"Debug: Clustering result type: {type(self.labels)}, length if tuple: {len(self.labels) if isinstance(self.labels, tuple) else 'not a tuple'}", log_level="DEBUG")
         
         # Save clustering model
         if self.clustering_method == 'hdbscan' and HDBSCAN_AVAILABLE:
@@ -737,7 +742,7 @@ class PerfectStormClustering:
                 ax.set_ylabel('UMAP Component 2')
                 ax.set_title('Clustering Results (UMAP)')
             except ImportError:
-                print("UMAP not available, falling back to PCA")
+                log_with_timestamp("UMAP not available, falling back to PCA", log_level="WARNING")
                 if self.pca is None:
                     self.pca = PCA(n_components=2)
                     self.pca.fit(ef)
@@ -1058,7 +1063,9 @@ class PerfectStormClustering:
             history['val_loss'].append(val_loss)
             
             # Print epoch summary
-            #print(f"Epoch [{epoch+1}/{self.num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+            # Log progress (similar to the main train method)
+            if (epoch + 1) % max(1, self.num_epochs // 10) == 0 or epoch == self.num_epochs - 1:
+                log_with_timestamp(f"Ensemble Autoencoder Training progress for {symbol}: {(epoch + 1) * 100 / self.num_epochs:.0f}% completed. Epoch {epoch+1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}", log_level="INFO")
         
         # Save the trained autoencoder model
         model_file = os.path.join(self.model_path, 'autoencoder_clustering.pth')
@@ -1313,7 +1320,7 @@ class PerfectStormClustering:
             
             json.dump(config, f)
         
-        print(f"Model saved to {base_filename}")
+        log_with_timestamp(f"Clustering Model saved to {base_filename}", log_level="INFO")
         return base_filename
     
     def load_model(self, path=None, symbol=None, period=None, interval=None):
@@ -1415,52 +1422,68 @@ class PerfectStormClustering:
         """
         import torch
         import numpy as np
-        from dashboard_utils import get_standardized_model_filename
-        model_path = self.model_path
-        base_filename = get_standardized_model_filename(
-            model_type="clustering",
-            model_name=self.clustering_method,
-            symbol=symbol,
-            period=period,
-            interval=interval,
-            base_path=model_path
-        )
-        config_file = f"{base_filename}_config.json"
-        model_loaded = False
+        from dashboard_utils import get_standardized_model_filename, _create_empty_figure # Ensure import
 
-        if os.path.exists(config_file):
-            self.load_model(path=model_path, symbol=symbol, period=period, interval=interval)
-            model_loaded = True
+        model_path = self.model_path # Use self.model_path consistent with __init__
+
+        # Attempt to load the model first
+        self.load_model(path=model_path, symbol=symbol, period=period, interval=interval)
+
+        # Check if essential models are loaded
+        essential_models_loaded = False
+        if self.autoencoder is not None:
+            if self.use_ensemble:
+                if self.ensemble_models: # Check if list is not empty
+                    essential_models_loaded = True
+            elif self.clustering_model is not None:
+                essential_models_loaded = True
+
+        if not essential_models_loaded:
+            log_with_timestamp(f"Clustering model for {symbol} ({period}, {interval}) not found or essential components missing. Skipping prediction. Please train the model first.", "WARNING")
+            return {
+                'results': pd.DataFrame(),
+                'metrics': {},
+                'visualizations': {
+                    'cluster_scatter': _create_empty_figure(f"Cluster Scatter: Model for {symbol} not trained/loaded."),
+                    'cluster_tsne': _create_empty_figure(f"Cluster t-SNE: Model for {symbol} not trained/loaded."),
+                    'cluster_umap': _create_empty_figure(f"Cluster UMAP: Model for {symbol} not trained/loaded."),
+                    'clusters_time_series': _create_empty_figure(f"Clusters Over Time: Model for {symbol} not trained/loaded."),
+                    'anomaly_scores': _create_empty_figure(f"Cluster Anomaly Scores: Model for {symbol} not trained/loaded.")
+                },
+                'status': 'Model not trained or failed to load'
+            }
 
         # --- Prepare features ONCE ---
         if self.use_temporal:
             X_prepared, indices, _ = self._prepare_temporal_data(df, feature_columns=feature_columns, add_technical_features=add_technical_features)
             X_reshaped = X_prepared.reshape(-1, X_prepared.shape[-1])
+            # Scaler should be loaded by self.load_model if it was fit during training
             if self.feature_scaler is None or not hasattr(self.feature_scaler, 'mean_'):
+                log_with_timestamp("Feature scaler not loaded correctly, clustering report might be inaccurate.", "ERROR")
+                # Fallback or raise error, for now, we'll proceed but this is a potential issue
                 self.feature_scaler = StandardScaler()
-                self.feature_scaler.fit(X_reshaped)
+                self.feature_scaler.fit(X_reshaped) # This would be fitting on test data if not careful
             X_scaled_reshaped = self.feature_scaler.transform(X_reshaped)
             X_scaled = X_scaled_reshaped.reshape(X_prepared.shape)
         else:
             X_prepared, indices, _ = self._prepare_data(df, feature_columns=feature_columns, add_technical_features=add_technical_features)
             if self.feature_scaler is None or not hasattr(self.feature_scaler, 'mean_'):
+                log_with_timestamp("Feature scaler not loaded correctly, clustering report might be inaccurate.", "ERROR")
                 self.feature_scaler = StandardScaler()
-                self.feature_scaler.fit(X_prepared)
+                self.feature_scaler.fit(X_prepared) # Potential fitting on test data
             X_scaled = self.feature_scaler.transform(X_prepared)
         X_tensor_scaled = torch.FloatTensor(X_scaled)
 
-        # --- Train if necessary, passing pre-scaled features ---
-        essential_model_present = (self.autoencoder is not None and 
-                               (self.clustering_model is not None or 
-                                (self.use_ensemble and self.ensemble_models)))
-        if not model_loaded or not essential_model_present:
-            if self.use_ensemble:
-                self.train_ensemble(df, feature_columns=feature_columns, add_technical_features=add_technical_features, X_scaled_for_encoding=X_tensor_scaled)
-            else:
-                self.train(df, feature_columns=feature_columns, add_technical_features=add_technical_features, X_scaled_for_encoding=X_tensor_scaled)
-            self.save_model(path=model_path, symbol=symbol, period=period, interval=interval)
-
         # --- Encode features ONCE using the (now definitely trained/loaded) autoencoder ---
+        # Autoencoder should be in eval mode from load_model
+        if self.autoencoder is None: # Should not happen if essential_models_loaded is true
+            log_with_timestamp("Autoencoder is None in generate_clustering_report after load. This should not happen.", "ERROR")
+            # Return error report again
+            return {
+                'results': pd.DataFrame(), 'metrics': {},
+                'visualizations': { 'cluster_scatter': _create_empty_figure(f"Clustering Autoencoder for {symbol} missing.")},
+                'status': 'Autoencoder model component missing post-load'
+            }
         self.autoencoder.eval()
         dataset_for_encoding = MarketClusteringDataset(X_tensor_scaled)
         dataloader_for_encoding = DataLoader(dataset_for_encoding, batch_size=self.batch_size)
@@ -1521,12 +1544,16 @@ class PerfectStormClustering:
         report['visualizations'] = figs
 
         if filename is not None:
-            os.makedirs(os.path.dirname(filename) if os.path.dirname(filename) else '.', exist_ok=True)
-            for name, fig in figs.items():
-                fig.savefig(f"{filename}_{name}.png", dpi=300, bbox_inches='tight')
-            report_data = {k: v for k, v in report.items() if k != 'visualizations'}
-            with open(f"{filename}_data.pkl", 'wb') as f:
-                pickle.dump(report_data, f)
+            # Saving figures and data is removed as per requirement to separate training and reporting
+            # os.makedirs(os.path.dirname(filename) if os.path.dirname(filename) else '.', exist_ok=True)
+            # for name, fig_dict in figs.items():
+            #     # Assuming figs contains Plotly figure dicts; direct savefig won't work.
+            #     # If they were Matplotlib figs, fig.savefig(...) would be here.
+            #     pass # Saving of figures handled by dashboard or not done here.
+            # report_data = {k: v for k, v in report.items() if k != 'visualizations'}
+            # with open(f"{filename}_data.pkl", 'wb') as f:
+            #     pickle.dump(report_data, f)
+            log_with_timestamp(f"Report generated for {symbol}. Saving of artifacts from generate_clustering_report is disabled.", "INFO")
 
         return report
     
@@ -1637,7 +1664,7 @@ class PerfectStormClustering:
             
             return fig_plotly
         except ImportError:
-            print("Plotly not available, returning Matplotlib figure")
+            log_with_timestamp("Plotly not available, returning Matplotlib figure", log_level="WARNING")
             return fig_mpl
     
     def _encode_features(self, df, feature_columns, add_technical_features):
