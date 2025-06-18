@@ -1844,3 +1844,30 @@ def create_portfolio_report_component(portfolio_report, symbol='Portfolio'):
         'marginTop': '20px',
         'marginBottom': '20px'
     })
+
+import logging
+from datetime import datetime
+
+def log_with_timestamp(message: str, log_level: str = "INFO"):
+    """
+    Logs a message with a timestamp and specified log level.
+    Format: YYYY-MM-DD HH:MM:SS - LEVEL - message
+    """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    formatted_message = f"{now} - {log_level.upper()} - {message}"
+
+    if log_level.upper() == "INFO":
+        logging.info(formatted_message)
+    elif log_level.upper() == "ERROR":
+        logging.error(formatted_message)
+    elif log_level.upper() == "WARNING":
+        logging.warning(formatted_message)
+    elif log_level.upper() == "DEBUG":
+        logging.debug(formatted_message)
+    elif log_level.upper() == "CRITICAL":
+        logging.critical(formatted_message)
+    else: # Default to INFO if level is unknown, and log the unknown level
+        logging.info(f"{now} - INFO - (Unknown log level: {log_level}) {message}")
+
+# Configure basic logging if not already configured
+logging.basicConfig(level=logging.INFO, format='%(message)s')
