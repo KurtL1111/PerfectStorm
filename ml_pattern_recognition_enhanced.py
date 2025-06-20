@@ -32,7 +32,7 @@ import pickle
 import json
 import time
 import plotly.graph_objects as go
-from dashboard_utils import get_standardized_model_filename
+from dashboard_utils import get_standardized_model_filename, log_with_timestamp
 # Additional imports for advanced features and regularization
 from technical_indicators import add_technical_indicators  # You must implement this function
 from sklearn.utils.class_weight import compute_class_weight
@@ -506,7 +506,7 @@ class MarketPatternRecognition:
         
         # Determine device for GPU support
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Using device: {self.device}")
+        log_with_timestamp(f"Using device: {self.device}", log_level="INFO")
     
     def preprocess_data(self, df, feature_cols, target_col=None, train_size=0.8, add_features=True):
         """
@@ -550,7 +550,7 @@ class MarketPatternRecognition:
 
         # Extract features, robust to NaNs
         features = df[feature_cols_final].fillna(0).values
-        print(f"Preprocessing data with features: {feature_cols_final}, shape: {features.shape}")
+        log_with_timestamp(f"Preprocessing data with features: {feature_cols_final}, shape: {features.shape}", log_level="DEBUG")
         # Initialize feature scaler if not already
         if self.feature_scaler is None:
             self.feature_scaler = StandardScaler()
@@ -712,7 +712,7 @@ class MarketPatternRecognition:
         # Use class device if not specified
         if device is None:
             device = self.device
-        print(f"Training on device: {device}")
+        log_with_timestamp(f"Training on device: {device}", log_level="INFO")
 
         # Get input size from first batch
         for batch in train_loader:
@@ -732,7 +732,7 @@ class MarketPatternRecognition:
         if self.use_ensemble:
             self.ensemble_models = self.create_ensemble_models(input_size, device=device)
             for i, model in enumerate(self.ensemble_models):
-                print(f"Training model {i+1}/{len(self.ensemble_models)}...")
+                log_with_timestamp(f"Training model {i+1}/{len(self.ensemble_models)}...", log_level="INFO")
                 # Use the standardized filename format to check if model exists
                 model_name = f"{self.model_type}_ensemble_{i}"
                 model_filename = get_standardized_model_filename(
@@ -745,7 +745,7 @@ class MarketPatternRecognition:
                 ) + ".pth"
                 
                 if os.path.exists(model_filename):
-                    print(f"Model {i} already exists at {model_filename}, loading instead of training.")
+                    log_with_timestamp(f"Model {i} already exists at {model_filename}, loading instead of training.", log_level="INFO")
                     model.load_state_dict(torch.load(model_filename, map_location=device))
                     model.eval()
                 else:
@@ -764,7 +764,7 @@ class MarketPatternRecognition:
             ) + ".pth"
             
             if os.path.exists(model_filename):
-                print(f"Model already exists at {model_filename}, loading instead of training.")
+                log_with_timestamp(f"Model already exists at {model_filename}, loading instead of training.", log_level="INFO")
                 self.model.load_state_dict(torch.load(model_filename, map_location=device))
                 self.model.eval()
             else:
@@ -792,15 +792,18 @@ class MarketPatternRecognition:
         from dashboard_utils import get_standardized_model_filename
         
         # Determine the appropriate model name/type
+        model_name_for_log = self.model_type
         if ensemble_idx is not None:
             model_name = f"{self.model_type}_ensemble_{ensemble_idx}"
+            model_name_for_log = f"{self.model_type}_ensemble_{ensemble_idx} for {symbol} ({period}, {interval})"
         else:
             model_name = self.model_type
+            model_name_for_log = f"{self.model_type} for {symbol} ({period}, {interval})"
             
         # Generate standardized filename
         model_pth = get_standardized_model_filename(
             model_type="pattern_recognition",
-            model_name=model_name,
+            model_name=model_name, # Use the specific name for saving
             symbol=symbol,
             period=period,
             interval=interval,
@@ -809,7 +812,7 @@ class MarketPatternRecognition:
             
         # Check if model already exists before training
         if os.path.exists(model_pth):
-            print(f"Model already exists at {model_pth}, loading instead of training.")
+            log_with_timestamp(f"Model already exists at {model_pth}, loading instead of training.", log_level="INFO")
             model.load_state_dict(torch.load(model_pth, map_location=device))
             model.eval()
             return model
@@ -834,6 +837,40 @@ class MarketPatternRecognition:
             output_flat = output.view(-1)
             target_flat = target.view(-1)
             # Compute weight as
+
+        criterion = weighted_bce_loss
+        optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
+
+        for epoch in range(self.num_epochs):
+            model.train()
+            train_loss = 0
+            for features_batch, labels_batch in train_loader:
+                features_batch, labels_batch = features_batch.to(device), labels_batch.to(device)
+                optimizer.zero_grad()
+                outputs = model(features_batch)
+                loss = criterion(outputs, labels_batch)
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+
+            train_loss /= len(train_loader)
+            test_loss = 0
+            if test_loader:
+                model.eval()
+                with torch.no_grad():
+                    for features_batch, labels_batch in test_loader:
+                        features_batch, labels_batch = features_batch.to(device), labels_batch.to(device)
+                        outputs = model(features_batch)
+                        loss = criterion(outputs, labels_batch)
+                        test_loss += loss.item()
+                    test_loss /= len(test_loader)
+
+            if (epoch + 1) % max(1, self.num_epochs // 10) == 0 or epoch == self.num_epochs - 1:
+                log_with_timestamp(f"Pattern Recognition Model Training progress for {model_name_for_log}: {(epoch + 1) * 100 / self.num_epochs:.0f}% completed. Epoch {epoch+1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}", log_level="INFO")
+
+        # Save the trained model
+        torch.save(model.state_dict(), model_pth)
+        return model
     
     def evaluate_model(self, model, test_loader, device='cpu'):
         """
@@ -1253,7 +1290,7 @@ class MarketPatternRecognition:
         with open(filename, 'wb') as f:
             pickle.dump(model_dict, f)
         
-        print(f"Model saved to {filename}")
+        log_with_timestamp(f"Pattern Recognition Model saved to {filename}", log_level="INFO")
         return filename
     
     def load_model(self, path=None, symbol=None, period=None, interval=None):
@@ -1317,10 +1354,10 @@ class MarketPatternRecognition:
             if os.path.exists(stats_filename):
                 with open(stats_filename, 'r') as f:
                     self.pattern_stats = json.load(f)
-            print(f"Model loaded from {model_filename}")
+            log_with_timestamp(f"Pattern Recognition Model loaded from {model_filename}", log_level="INFO")
             return True
         except Exception as e:
-            print(f"Error loading model: {e}")
+            log_with_timestamp(f"Error loading model: {e}", log_level="ERROR")
             return False
     
     def create_plotly_roc_curve(self, y_true, y_pred):
@@ -1671,14 +1708,32 @@ class MarketPatternRecognition:
         Returns:
         - report: Dictionary with report components
         """
-        # Preprocess data
-        from dashboard_utils import _create_empty_figure
-        if target_col is not None and target_col in df.columns:
-            processed_data = self.preprocess_data(df, feature_cols, target_col)
-            if self.model is None:
-                self.train_model(processed_data['train_loader'], processed_data['test_loader'], device, symbol=symbol, period=period, interval=interval)
-                self.save_model(symbol=symbol, period=period, interval=interval)
+        from dashboard_utils import _create_empty_figure # Ensure this import is present
 
+        # Attempt to load the model first
+        model_loaded_successfully = self.load_model(path=self.model_path, symbol=symbol, period=period, interval=interval)
+
+        if not model_loaded_successfully or self.model is None:
+            log_with_timestamp(f"Pattern recognition model for {symbol} ({period}, {interval}) not found or failed to load. Skipping prediction. Please train the model first.", "WARNING")
+            return {
+                'accuracy': 0, 'precision': 0, 'recall': 0, 'f1': 0,
+                'predictions': pd.DataFrame(),
+                'results': pd.DataFrame(), # Ensure this is a DataFrame
+                'visualizations': {
+                    'roc_curve': _create_empty_figure(f"ROC Curve: Model for {symbol} not trained/loaded."),
+                    'precision_recall_curve': _create_empty_figure(f"Precision-Recall: Model for {symbol} not trained/loaded."),
+                    'confusion_matrix': _create_empty_figure(f"Confusion Matrix: Model for {symbol} not trained/loaded."),
+                    'predictions': _create_empty_figure(f"Predictions Chart: Model for {symbol} not trained/loaded.")
+                },
+                'status': 'Model not trained or failed to load'
+            }
+
+        # Preprocess data - target_col might be None if we are only predicting
+        # The preprocess_data method should handle target_col being None
+        processed_data = self.preprocess_data(df, feature_cols, target_col, add_features=True) # Assuming add_features=True for consistency
+
+        # If target_col is available (i.e., not just predicting, but also have labels for evaluation)
+        if target_col is not None and target_col in df.columns and processed_data.get('test_loader') is not None:
             # Evaluate model
             accuracy, precision, recall, f1 = self.evaluate_model(self.model, processed_data['test_loader'], device)
 
@@ -1707,9 +1762,9 @@ class MarketPatternRecognition:
                 if len(np.unique(y_true)) > 1:
                     valid_for_eval_charts = True
                 else:
-                    print("Pattern Rec Report: Only one class present in y_true. ROC, PR, Confusion Matrix are not meaningful.")
+                    log_with_timestamp("Pattern Rec Report: Only one class present in y_true. ROC, PR, Confusion Matrix are not meaningful.", log_level="WARNING")
             else:
-                print(f"Pattern Rec Report: Insufficient or mismatched test data. y_true len: {len(y_true) if hasattr(y_true, '__len__') else 'N/A'}, y_pred len: {len(y_pred) if hasattr(y_pred, '__len__') else 'N/A'}")
+                log_with_timestamp(f"Pattern Rec Report: Insufficient or mismatched test data. y_true len: {len(y_true) if hasattr(y_true, '__len__') else 'N/A'}, y_pred len: {len(y_pred) if hasattr(y_pred, '__len__') else 'N/A'}", log_level="WARNING")
 
             placeholder_title_suffix = "Error: Insufficient/Invalid Test Data"
             if not valid_for_eval_charts:
@@ -1719,17 +1774,17 @@ class MarketPatternRecognition:
                 try:
                     report['visualizations']['roc_curve'] = self.create_plotly_roc_curve(y_true, y_pred)
                 except Exception as e:
-                    print(f"Error creating ROC curve: {e}")
+                    log_with_timestamp(f"Error creating ROC curve: {e}", log_level="ERROR")
                     report['visualizations']['roc_curve'] = _create_empty_figure("ROC Curve " + placeholder_title_suffix)
                 try:
                     report['visualizations']['precision_recall_curve'] = self.create_plotly_precision_recall_curve(y_true, y_pred)
                 except Exception as e:
-                    print(f"Error creating PR curve: {e}")
+                    log_with_timestamp(f"Error creating PR curve: {e}", log_level="ERROR")
                     report['visualizations']['precision_recall_curve'] = _create_empty_figure("PR Curve " + placeholder_title_suffix)
                 try:
                     report['visualizations']['confusion_matrix'] = self.create_plotly_confusion_matrix(y_true, y_pred)
                 except Exception as e:
-                    print(f"Error creating Confusion Matrix: {e}")
+                    log_with_timestamp(f"Error creating Confusion Matrix: {e}", log_level="ERROR")
                     report['visualizations']['confusion_matrix'] = _create_empty_figure("Confusion Matrix " + placeholder_title_suffix)
             else:
                 report['visualizations']['roc_curve'] = _create_empty_figure("ROC Curve: " + placeholder_title_suffix)
@@ -1740,7 +1795,7 @@ class MarketPatternRecognition:
             try:
                 report['visualizations']['predictions'] = self.create_plotly_predictions(df, predictions, price_col)
             except Exception as e:
-                print(f"Error creating predictions chart: {e}")
+                log_with_timestamp(f"Error creating predictions chart: {e}", log_level="ERROR")
                 report['visualizations']['predictions'] = _create_empty_figure(f"Predictions Chart Error: {e}")
 
         else:
@@ -1759,27 +1814,28 @@ class MarketPatternRecognition:
             try:
                 report['visualizations']['predictions'] = self.create_plotly_predictions(df, predictions, price_col)
             except Exception as e:
-                print(f"Error creating predictions chart: {e}")
+                log_with_timestamp(f"Error creating predictions chart: {e}", log_level="ERROR")
                 report['visualizations']['predictions'] = _create_empty_figure(f"Predictions Chart Error: {e}")
             # Placeholders for unavailable eval charts
             report['visualizations']['roc_curve'] = _create_empty_figure("ROC Curve Not Available (Prediction Only Mode)", "No training data provided")
             report['visualizations']['precision_recall_curve'] = _create_empty_figure("Precision-Recall Curve Not Available (Prediction Only Mode)", "No training data provided")
             report['visualizations']['confusion_matrix'] = _create_empty_figure("Confusion Matrix Not Available (Prediction Only Mode)", "No training data provided")
-        #report['visualizations'] = visualizations
+        #report['visualizations'] = visualizations # This line was commented out, keeping it as is.
         
-        # Save report if filename provided
+        # Save report if filename provided (but remove actual saving part)
         if filename is not None:
-            # Save raw data
-            report_data = {k: v for k, v in report.items() if k != 'visualizations'}
-            with open(f"{filename}_data.json", 'w') as f:
-                # Convert pandas DataFrames to JSON
-                import json
-                json_data = {}
-                for k, v in report_data.items():
-                    if isinstance(v, pd.DataFrame):
-                        json_data[k] = v.to_json(date_format='iso', orient='split')
-                    else:
-                        json_data[k] = v
-                json.dump(json_data, f)
+            log_with_timestamp(f"Report generated for Pattern Recognition {symbol}. Saving of artifacts from generate_pattern_report is disabled.", "INFO")
+            # # Save raw data - This part is removed as per subtask instructions
+            # report_data = {k: v for k, v in report.items() if k != 'visualizations'}
+            # with open(f"{filename}_data.json", 'w') as f:
+            #     # Convert pandas DataFrames to JSON
+            #     import json # Already imported at top
+            #     json_data = {}
+            #     for k, v in report_data.items():
+            #         if isinstance(v, pd.DataFrame):
+            #             json_data[k] = v.to_json(date_format='iso', orient='split')
+            #         else:
+            #             json_data[k] = v
+            #     json.dump(json_data, f)
         
         return report
