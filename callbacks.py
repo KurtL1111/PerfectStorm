@@ -8,18 +8,15 @@ import os
 # import logging # No longer directly needed, log_with_timestamp handles logging calls
 import numpy as np
 import random # Keep for alerts example
-import os # Added for path joining
-import pandas as pd # Added for DataFrame operations
+import os # Retained: Used in save_manual_breadth_data and update_dashboard
+import pandas as pd # Retained: Used in various callbacks
+
 
 # --- Import Core Modules ---
 from market_data_retrieval import MarketDataRetriever
 from quantitative_strategy import QuantitativeStrategy # NEW Strategy Class
 from backtesting_engine import BacktestingEngine
 from portfolio_optimization import PortfolioOptimizer
-# ML Models for Training Callback
-from ml_anomaly_detection_enhanced import MarketAnomalyDetection
-from ml_clustering_enhanced_completed import PerfectStormClustering
-from ml_pattern_recognition_enhanced import MarketPatternRecognition
 
 
 # --- Import Dashboard Utility Functions ---
@@ -35,14 +32,6 @@ from dashboard_utils import (
 
 # Configure logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s') # Configured in dashboard_utils
-
-# --- Default Feature Sets for Model Training ---
-DEFAULT_ANOMALY_FEATURE_COLS = ['open', 'high', 'low', 'close', 'volume', 'rsi', 'macd_line', 'stoch_k', 'cci']
-# Note: 'atr' and 'bb_width' might need to be calculated if not default from TechnicalIndicators.
-# Assuming they are handled by the ML modules' preprocessing or add_technical_features=True.
-DEFAULT_CLUSTERING_FEATURE_COLS = ['open', 'high', 'low', 'close', 'volume', 'rsi', 'stoch_k', 'macd_line', 'cci', 'bb_upper', 'bb_lower', 'adx', 'cmf', 'mfi', 'atr']
-DEFAULT_PATTERN_FEATURE_COLS = ['open', 'high', 'low', 'close', 'volume', 'rsi', 'macd_line', 'stoch_k', 'cci', 'bb_width', 'atr']
-DEFAULT_PATTERN_TARGET_COL = 'future_return_signal'
 
 
 def register_callbacks(app):
@@ -415,129 +404,3 @@ def register_callbacks(app):
                  html.Div(f"Error: {str(e)}", style={'color': 'red'}), {'display': 'none'},
                  None, empty_fig, empty_fig, empty_fig, empty_fig, empty_fig
              )
-
-    @app.callback(
-        Output('train-models-output', 'children'),
-        [Input('train-models-button', 'n_clicks')],
-        [State('train-symbol-input', 'value'),
-         State('train-period-dropdown', 'value'),
-         State('train-interval-dropdown', 'value')],
-        prevent_initial_call=True
-    )
-    def handle_train_models(n_clicks, symbol, period, interval):
-        if n_clicks == 0 or n_clicks is None:
-            raise PreventUpdate
-
-        log_with_timestamp(f"Manual model training started for {symbol}, {period}, {interval}.", log_level="INFO")
-        feedback_messages = []
-
-        try:
-            # 1. Data Retrieval
-            log_with_timestamp(f"Fetching data for {symbol} ({period}, {interval}) for training...", log_level="INFO")
-            api_key = os.getenv("ALPHAVANTAGE_API_KEY", "25WNVRI1YIXCDIH1") # Consider moving API key to a config file or env variable
-            data_retriever = MarketDataRetriever(api_key=api_key)
-            stock_data = data_retriever.get_stock_history(symbol, interval=interval, period=period)
-
-            if stock_data is None or stock_data.empty:
-                error_msg = f"Failed to retrieve stock data for {symbol}. Cannot proceed with training."
-                log_with_timestamp(error_msg, log_level="ERROR")
-                return html.Div(error_msg, style={'color': 'red'})
-
-            log_with_timestamp(f"Data retrieved for training. Shape: {stock_data.shape}", log_level="INFO")
-
-            # 2. Feature Engineering for Pattern Recognition Target
-            # Ensure 'close' column exists
-            if 'close' not in stock_data.columns:
-                error_msg = "Error: 'close' column missing from stock data. Cannot create target for pattern recognition."
-                log_with_timestamp(error_msg, log_level="ERROR")
-                feedback_messages.append(html.P(error_msg, style={'color': 'red'}))
-                # Potentially skip pattern recognition or return early
-            else:
-                stock_data[DEFAULT_PATTERN_TARGET_COL] = (stock_data['close'].shift(-1) > stock_data['close']).astype(int)
-                stock_data.dropna(subset=[DEFAULT_PATTERN_TARGET_COL], inplace=True) # Ensure target is clean
-                if stock_data.empty: # Check if dropna emptied the DataFrame
-                    error_msg = "Error: DataFrame became empty after creating pattern recognition target. Check data quality or length."
-                    log_with_timestamp(error_msg, log_level="ERROR")
-                    feedback_messages.append(html.P(error_msg, style={'color': 'red'}))
-                    # Potentially skip pattern recognition or return early if other models can still train on original data length
-
-            # --- Anomaly Detection Training ---
-            try:
-                log_with_timestamp("Starting Anomaly Detection model training...", log_level="INFO")
-                anomaly_model_path = os.path.join('models', 'Anomaly Detection Models') # Standardized path
-                anomaly_model = MarketAnomalyDetection(model_path=anomaly_model_path)
-                # Ensure feature_cols are present in stock_data, else anomaly_model.preprocess_data will raise error
-                current_anomaly_features = [col for col in DEFAULT_ANOMALY_FEATURE_COLS if col in stock_data.columns]
-                if len(current_anomaly_features) < 3: # Arbitrary minimum number of features
-                    raise ValueError(f"Not enough features for anomaly detection. Available: {current_anomaly_features}")
-
-                anomaly_model.train_model(df=stock_data.copy(), feature_cols=current_anomaly_features, device='cpu', symbol=symbol, period=period, interval=interval)
-                anomaly_model.save_model(symbol=symbol, period=period, interval=interval)
-                feedback_messages.append(html.P("Anomaly Detection model training complete."))
-                log_with_timestamp("Anomaly Detection model training finished.", log_level="INFO")
-            except Exception as e:
-                error_msg = f"Error training Anomaly Detection model: {str(e)}"
-                log_with_timestamp(error_msg, log_level="ERROR")
-                # traceback.print_exc() # For server-side detailed logs
-                feedback_messages.append(html.P(error_msg, style={'color': 'red'}))
-
-            # --- Clustering Model Training ---
-            try:
-                log_with_timestamp("Starting Clustering model training...", log_level="INFO")
-                clustering_model_path = os.path.join('models', 'Clustering Models') # Standardized path
-                clustering_model = PerfectStormClustering(model_path=clustering_model_path)
-                current_clustering_features = [col for col in DEFAULT_CLUSTERING_FEATURE_COLS if col in stock_data.columns]
-                if len(current_clustering_features) < 3:
-                     raise ValueError(f"Not enough features for clustering. Available: {current_clustering_features}")
-
-                clustering_model.train(df=stock_data.copy(), feature_columns=current_clustering_features, add_technical_features=True, symbol=symbol, period=period, interval=interval)
-                clustering_model.save_model(symbol=symbol, period=period, interval=interval)
-                feedback_messages.append(html.P("Clustering model training complete."))
-                log_with_timestamp("Clustering model training finished.", log_level="INFO")
-            except Exception as e:
-                error_msg = f"Error training Clustering model: {str(e)}"
-                log_with_timestamp(error_msg, log_level="ERROR")
-                feedback_messages.append(html.P(error_msg, style={'color': 'red'}))
-
-            # --- Pattern Recognition Model Training ---
-            # Check if target column was successfully created and data is available
-            if DEFAULT_PATTERN_TARGET_COL in stock_data.columns and not stock_data.empty:
-                try:
-                    log_with_timestamp("Starting Pattern Recognition model training...", log_level="INFO")
-                    pattern_model_path = os.path.join('models', 'Pattern Recognition Models') # Standardized path
-                    pattern_model = MarketPatternRecognition(model_path=pattern_model_path)
-                    current_pattern_features = [col for col in DEFAULT_PATTERN_FEATURE_COLS if col in stock_data.columns]
-                    if len(current_pattern_features) < 3:
-                        raise ValueError(f"Not enough features for pattern recognition. Available: {current_pattern_features}")
-
-                    # Preprocess_data now returns a dict, ensure this is handled
-                    processed_pattern_data = pattern_model.preprocess_data(df=stock_data.copy(), feature_cols=current_pattern_features, target_col=DEFAULT_PATTERN_TARGET_COL, add_features=True)
-
-                    if processed_pattern_data['train_loader'] is not None and len(processed_pattern_data['train_loader'].dataset) > 0:
-                        pattern_model.train_model(train_loader=processed_pattern_data['train_loader'], test_loader=processed_pattern_data['test_loader'], device='cpu', symbol=symbol, period=period, interval=interval)
-                        pattern_model.save_model(symbol=symbol, period=period, interval=interval)
-                        feedback_messages.append(html.P("Pattern Recognition model training complete."))
-                        log_with_timestamp("Pattern Recognition model training finished.", log_level="INFO")
-                    else:
-                        error_msg = "Not enough data for Pattern Recognition model after preprocessing."
-                        log_with_timestamp(error_msg, log_level="WARNING")
-                        feedback_messages.append(html.P(error_msg, style={'color': 'orange'}))
-
-                except Exception as e:
-                    error_msg = f"Error training Pattern Recognition model: {str(e)}"
-                    log_with_timestamp(error_msg, log_level="ERROR")
-                    feedback_messages.append(html.P(error_msg, style={'color': 'red'}))
-            else:
-                feedback_messages.append(html.P("Skipping Pattern Recognition training due to earlier data issues.", style={'color': 'orange'}))
-
-
-            log_with_timestamp("Manual model training process finished.", log_level="INFO")
-            return html.Div(feedback_messages + [html.P("Model training process completed. Check logs for details.", style={'color': 'green'})])
-
-        except Exception as e:
-            # Catch-all for unexpected errors during the whole process
-            error_msg = f"An unexpected error occurred during model training: {str(e)}"
-            log_with_timestamp(error_msg, log_level="CRITICAL")
-            # traceback.print_exc()
-            feedback_messages.append(html.P(error_msg, style={'color': 'red', 'fontWeight': 'bold'}))
-            return html.Div(feedback_messages)
