@@ -11,15 +11,12 @@ import random # Keep for alerts example
 import os # Retained: Used in save_manual_breadth_data and update_dashboard
 import pandas as pd # Retained: Used in various callbacks
 
+
 # --- Import Core Modules ---
 from market_data_retrieval import MarketDataRetriever
 from quantitative_strategy import QuantitativeStrategy # NEW Strategy Class
 from backtesting_engine import BacktestingEngine
 from portfolio_optimization import PortfolioOptimizer
-# ML Models for Training Callback are no longer needed here directly
-# from ml_anomaly_detection_enhanced import MarketAnomalyDetection
-# from ml_clustering_enhanced_completed import PerfectStormClustering
-# from ml_pattern_recognition_enhanced import MarketPatternRecognition
 
 
 # --- Import Dashboard Utility Functions ---
@@ -35,12 +32,6 @@ from dashboard_utils import (
 
 # Configure logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s') # Configured in dashboard_utils
-
-# --- Default Feature Sets for Model Training (Removed) ---
-# DEFAULT_ANOMALY_FEATURE_COLS = ['open', 'high', 'low', 'close', 'volume', 'rsi', 'macd_line', 'stoch_k', 'cci']
-# DEFAULT_CLUSTERING_FEATURE_COLS = ['open', 'high', 'low', 'close', 'volume', 'rsi', 'stoch_k', 'macd_line', 'cci', 'bb_upper', 'bb_lower', 'adx', 'cmf', 'mfi', 'atr']
-# DEFAULT_PATTERN_FEATURE_COLS = ['open', 'high', 'low', 'close', 'volume', 'rsi', 'macd_line', 'stoch_k', 'cci', 'bb_width', 'atr']
-# DEFAULT_PATTERN_TARGET_COL = 'future_return_signal'
 
 
 def register_callbacks(app):
